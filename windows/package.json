@@ -7,10 +7,13 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "check:versions": "node scripts/check-versions.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "tauri": "tauri",
     "predev": "node scripts/build-hook.mjs",
     "prebuild": "node scripts/build-hook.mjs",
+    "prepack": "node scripts/check-versions.mjs",
+    "prepack:offline": "node scripts/check-versions.mjs",
     "pack": "tauri build && node scripts/pack.mjs",
     "pack:offline": "tauri build --config src-tauri/tauri.offline.conf.json && node scripts/pack.mjs --offline"
   },

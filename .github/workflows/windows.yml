@@ -65,15 +65,7 @@ jobs:
         run: cargo +stable fmt --all -- --check
 
       - name: Check package versions
-        shell: pwsh
-        run: |
-          $conf = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
-          $pkg = (Get-Content package.json | ConvertFrom-Json).version
-          $lock = (Get-Content package-lock.json | ConvertFrom-Json).version
-          $cargo = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"').Matches[0].Groups[1].Value
-          if ($conf -ne $pkg -or $conf -ne $lock -or $conf -ne $cargo) {
-            throw "Package versions disagree: Tauri=$conf npm=$pkg lock=$lock Cargo=$cargo"
-          }
+        run: npm run check:versions
 
       - name: Build installer
         run: npm run pack

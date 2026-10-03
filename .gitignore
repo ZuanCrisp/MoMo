@@ -27,10 +27,10 @@ _prive/
 *.key
 
 # Local toolchains, archives, installed app and distribution files
-.tools/
-.local/
-app/
-installer/
+/.tools/
+/.local/
+/app/
+/installer/
 *.zip
 *.exe
 *.log
