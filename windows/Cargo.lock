@@ -2221,7 +2221,7 @@ dependencies = [
 
 [[package]]
 name = "momo"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "gtk",
  "keyring",
@@ -2239,7 +2239,7 @@ dependencies = [
 
 [[package]]
 name = "momo-hook"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "serde_json",

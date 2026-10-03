@@ -31,6 +31,10 @@ _prive/
 /.local/
 /app/
 /installer/
+/Local AI Models/
+*.gguf
+*.safetensors
+*.onnx
 *.zip
 *.exe
 *.log

@@ -95,6 +95,8 @@ export interface Settings {
   /** Kept for migrating preferences from the original Claude-only chat. */
   model: string;
   ai: AIConfig;
+  computerControl: boolean;
+  localModelsDirectory: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -110,6 +112,8 @@ export const DEFAULT_SETTINGS: Settings = {
   hooksInstalled: false,
   model: "claude-opus-5",
   ai: defaultAIConfig(),
+  computerControl: false,
+  localModelsDirectory: "",
 };
 
 type Listener = () => void;

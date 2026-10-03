@@ -331,6 +331,11 @@ pub async fn complete(
     messages: &[Message],
 ) -> Result<String, Failure> {
     let body = body(profile, messages)?;
+    let response = request(profile, key, &body).await?;
+    parse_reply(profile.provider, &response)
+}
+
+pub async fn request(profile: &Profile, key: Option<&str>, body: &Value) -> Result<Value, Failure> {
     let suffix = match profile.provider {
         Provider::Anthropic => "messages".into(),
         Provider::Openai => "responses".into(),
@@ -341,8 +346,7 @@ pub async fn complete(
     let request = client(profile.timeout_seconds, profile.provider.is_local())?
         .post(format!("{}/{suffix}", profile.base_url))
         .json(&body);
-    let response = json_response(authenticate(request, profile.provider, key)).await?;
-    parse_reply(profile.provider, &response)
+    json_response(authenticate(request, profile.provider, key)).await
 }
 
 #[derive(Clone, Serialize, Debug, PartialEq, Eq)]

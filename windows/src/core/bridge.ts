@@ -93,6 +93,8 @@ export const Bridge = {
   aiSetActive: (profileId: string) => callOrThrow<Settings>("ai_set_active", { profileId }),
   aiListModels: (profile: AIProfile, draftKey: string | null) =>
     callOrThrow<AIModel[]>("ai_list_models", { profile, draftKey }),
+  localAIStatus: (directory: string | null = null) => callOrThrow<LocalAIStatus>("local_ai_status", { directory }),
+  localAIStart: (directory: string) => callOrThrow<LocalAIStatus>("local_ai_start", { directory }),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
   /** Only ever tells you whether a key exists — never its value. */
@@ -131,6 +133,14 @@ export interface HookStatus {
   settingsPath: string;
   hookPath: string;
   hookReady: boolean;
+}
+
+export interface LocalAIStatus {
+  directory: string;
+  models: string[];
+  runtimeInstalled: boolean;
+  running: boolean;
+  baseUrl: string;
 }
 
 export interface HookPreview {

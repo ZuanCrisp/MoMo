@@ -1,5 +1,11 @@
 import { test, expect, type Page } from "@playwright/test";
 import { DEFAULT_SETTINGS } from "../../src/core/state";
+import { PANEL_H, chatPromptHeight } from "../../src/core/layout";
+
+async function choose(page: Page, label: string, option: string) {
+  await page.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByRole("option", { name: option, exact: true }).click();
+}
 
 async function fixture(page: Page) {
   await page.addInitScript((initial) => {
@@ -15,6 +21,8 @@ async function fixture(page: Page) {
           case "secret_present": return false;
           case "ai_key_status": return t.settings.ai.profiles.flatMap((p: any) => p.keys.map((k: any) => ({ profileId: p.id, keyId: k.id, present: true })));
           case "ai_list_models": return [{ id: "test-chat-model", label: "Test chat model" }];
+          case "local_ai_status": return { directory: "D:\\MoMo\\Local AI Models", models: ["llama3.2:3b", "llama3.1:8b"], runtimeInstalled: true, running: false, baseUrl: "http://127.0.0.1:11435" };
+          case "local_ai_start": return { directory: args.directory, models: ["llama3.2:3b", "llama3.1:8b"], runtimeInstalled: true, running: true, baseUrl: "http://127.0.0.1:11435" };
           case "ai_save_config":
             if (t.failSave) throw "Could not save settings. Your previous keys were restored.";
             t.saves.push(structuredClone(args));
@@ -33,15 +41,62 @@ async function fixture(page: Page) {
 
 test.beforeEach(async ({ page }) => { await fixture(page); });
 
+test("holding chat open cancels an already scheduled collapse timer", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/settings.html");
+  await page.evaluate(async () => {
+    const { IslandStateMachine } = await import("/src/island/fsm.ts");
+    const fsm = new IslandStateMachine();
+    fsm.homeToPetitDelay = 1; fsm.forceHome(); fsm.mouseLeft(); fsm.pinned = true;
+    (window as any).testedFsm = fsm;
+  });
+  await page.clock.runFor(2000);
+  expect(await page.evaluate(() => (window as any).testedFsm.state)).toBe("home");
+  await page.evaluate(() => { const fsm = (window as any).testedFsm; fsm.pinned = false; fsm.mouseLeft(); });
+  await page.clock.runFor(2000);
+  expect(await page.evaluate(() => (window as any).testedFsm.state)).toBe("petit");
+});
+
+test("local setup detects the library and adds a usable keyless profile", async ({ page }) => {
+  await page.goto("/settings.html");
+  await expect(page.getByLabel("Local models folder")).toHaveValue("D:\\MoMo\\Local AI Models");
+  await page.getByRole("button", { name: "Start local AI", exact: true }).click();
+  await expect(page.getByText("Local AI is running", { exact: false })).toBeVisible();
+  await choose(page, "Downloaded local model", "llama3.1:8b");
+  await page.getByRole("button", { name: "Add model profile", exact: true }).click();
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await expect(page.getByText("Profiles saved.", { exact: false })).toBeVisible();
+  const ai = await page.evaluate(() => (window as any).aiTest.settings.ai);
+  const active = ai.profiles.find((profile: any) => profile.id === ai.activeProfileId);
+  expect(active.model).toBe("llama3.1:8b"); expect(active.baseUrl).toBe("http://127.0.0.1:11435"); expect(active.keys).toEqual([]);
+  await expect(page.getByRole("button", { name: /install hooks/i })).toHaveCount(0);
+});
+
+test("the custom model dropdown works by keyboard and stays inside the chat card", async ({ page }) => {
+  await chatFixture(page);
+  await page.evaluate(() => {
+    const state = (window as any).chatState;
+    state.settings.ai.profiles.push({ ...state.settings.ai.profiles[0], id: "second", name: "Llama offline", model: "llama3.2:3b", provider: "ollama" }); state.notify();
+  });
+  const control = page.getByRole("combobox", { name: "Chat AI model" });
+  await control.focus(); await control.press("ArrowDown"); await control.press("End"); await control.press("Enter");
+  await expect(control).toContainText("Llama offline"); await expect(control).toHaveAttribute("aria-expanded", "false");
+  await control.click();
+  const menu = await page.getByRole("listbox").boundingBox(); const card = await page.locator(".chat-card").boundingBox();
+  expect(menu!.y + menu!.height).toBeLessThanOrEqual(card!.y + card!.height);
+  await control.press("Escape"); await expect(page.getByRole("listbox")).toHaveCount(0);
+  expect(PANEL_H - chatPromptHeight(200)).toBeGreaterThanOrEqual(60);
+});
+
 test("multiple keys retain their identity when reordered; secrets never enter profile metadata", async ({ page }) => {
   await page.goto("/settings.html");
   await expect(page.getByLabel("API key 1", { exact: true })).toHaveAttribute("placeholder", "Saved securely · paste to replace");
   await page.getByRole("button", { name: "+ Add profile", exact: true }).click();
   await page.getByLabel("Profile name", { exact: true }).fill("Gemini work");
-  await page.getByLabel("AI provider").selectOption("gemini");
+  await choose(page, "AI provider", "Gemini · Google");
   await page.getByLabel("API key 1", { exact: true }).fill("fake-main-only-for-test");
   await page.getByRole("button", { name: "Load models", exact: true }).click();
-  await page.getByLabel("Available models").selectOption("test-chat-model");
+  await choose(page, "Available models", "Test chat model · test-chat-model");
   await page.getByRole("button", { name: "+ Add API key", exact: true }).click();
   await page.getByLabel("API key 2", { exact: true }).fill("fake-backup-only-for-test");
   await page.getByRole("button", { name: "Move API key 2 up", exact: true }).click();
@@ -65,10 +120,10 @@ test("a failed save preserves the draft and Discard restores saved keys", async 
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByText("Could not save settings.", { exact: false })).toBeVisible();
   await expect(page.getByLabel("API key 1", { exact: true })).toHaveValue("fake-replacement");
-  await page.getByLabel("AI provider").selectOption("openai");
+  await choose(page, "AI provider", "OpenAI / ChatGPT");
   await expect(page.getByLabel("API key 1", { exact: true })).toHaveValue("");
   await page.getByRole("button", { name: "Discard", exact: true }).click();
-  await expect(page.getByLabel("AI provider")).toHaveValue("anthropic");
+  await expect(page.getByLabel("AI provider")).toContainText("Claude · Anthropic");
   await expect(page.getByLabel("API key 1", { exact: true })).toHaveValue("");
 });
 
@@ -77,7 +132,7 @@ test("local mode needs no key and online fallback is an explicit choice; narrow 
   await page.goto("/settings.html");
   await page.getByRole("button", { name: "+ Add profile", exact: true }).click();
   await page.getByLabel("Profile name", { exact: true }).fill("Llama offline");
-  await page.getByLabel("AI provider").selectOption("ollama");
+  await choose(page, "AI provider", "Ollama · local");
   await expect(page.getByText("No key needed.", { exact: false })).toBeVisible();
   await page.getByLabel("Model ID", { exact: true }).fill("llama3.2");
   await page.getByRole("button", { name: "Use as active model", exact: true }).click();

@@ -1,11 +1,13 @@
 // MoMo for Windows — app wiring and the commands the island calls.
 
 mod ai;
+mod desktop;
 mod encoding;
 mod files;
 mod hooks;
 mod integrations;
 mod island;
+mod local_ai;
 mod log;
 mod pipe;
 mod platform;
@@ -68,6 +70,7 @@ fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) 
         // settings window. AI changes go through ai_save_config instead.
         settings.ai = current.ai.clone();
         settings.model = current.model.clone();
+        settings.local_models_directory = current.local_models_directory.clone();
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -257,13 +260,59 @@ async fn chat_send(
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let config = shared.settings.lock().unwrap().ai.clone();
-    ai::send(&chat, &config, query, context, secrets::read_ai).await
+    let settings = shared.settings.lock().unwrap().clone();
+    ai::send_controlled(
+        &chat,
+        &settings.ai,
+        query,
+        context,
+        secrets::read_ai,
+        settings.computer_control,
+        desktop::execute,
+    )
+    .await
 }
 
 #[tauri::command]
 fn chat_cancel(chat: State<Chat>) {
     chat.cancel();
+}
+
+#[tauri::command]
+async fn local_ai_status(
+    shared: State<'_, Shared>,
+    local: State<'_, local_ai::LocalAI>,
+    directory: Option<String>,
+) -> Result<local_ai::Status, String> {
+    let directory = directory.unwrap_or_else(|| {
+        shared
+            .settings
+            .lock()
+            .unwrap()
+            .local_models_directory
+            .clone()
+    });
+    local_ai::status(&local, &directory).await
+}
+
+#[tauri::command]
+async fn local_ai_start(
+    app: AppHandle,
+    shared: State<'_, Shared>,
+    local: State<'_, local_ai::LocalAI>,
+    directory: String,
+) -> Result<local_ai::Status, String> {
+    let status = local_ai::start(&local, &directory).await?;
+    let saved = {
+        let mut current = shared.settings.lock().unwrap();
+        let mut next = current.clone();
+        next.local_models_directory = status.directory.clone();
+        settings::save(&next).map_err(|_| "Could not save the model folder.")?;
+        *current = next.clone();
+        next
+    };
+    let _ = app.emit("settings-changed", saved);
+    Ok(status)
 }
 
 #[tauri::command]
@@ -460,6 +509,7 @@ pub fn run() {
         })
         .manage(Pending::default())
         .manage(Chat::default())
+        .manage(local_ai::LocalAI::default())
         .invoke_handler(tauri::generate_handler![
             boot,
             save_settings,
@@ -479,6 +529,8 @@ pub fn run() {
             log_line,
             chat_send,
             chat_cancel,
+            local_ai_status,
+            local_ai_start,
             chat_reset,
             ai_key_status,
             ai_save_config,
@@ -520,8 +572,23 @@ pub fn run() {
             hooks::ensure_hook_exe(&handle);
             pipe::start(handle.clone());
             integrations::start(handle.clone());
+            if !loaded.local_models_directory.is_empty() {
+                let local_handle = handle.clone();
+                let directory = loaded.local_models_directory.clone();
+                tauri::async_runtime::spawn(async move {
+                    let local = local_handle.state::<local_ai::LocalAI>();
+                    if let Err(error) = local_ai::start(&local, &directory).await {
+                        log::line(error);
+                    }
+                });
+            }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running MoMo");
+        .build(tauri::generate_context!())
+        .expect("error while building MoMo")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<local_ai::LocalAI>().stop();
+            }
+        });
 }

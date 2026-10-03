@@ -48,22 +48,18 @@ Everything else happens on its own: a Claude Code permission request opens the
 island with **Deny / Allow**, a finished session shows what it did, and
 your integrations sit in the coloured pills next to Mochi.
 
-## Claude Code
+## Local AI and desktop actions
 
-<img src="screenshots/settings.png" width="562" alt="The settings window">
+Settings → **Local AI · offline** detects an Ollama model folder containing
+`blobs` and `manifests`. Click **Start local AI**, choose a model, then **Add model
+profile → Save changes**. MoMo owns a separate loopback server on port 11435.
+The library is reused in place and is excluded from Git and installers. Ollama
+and models must be installed or copied separately on other devices.
 
-Open **Settings… → Claude Code → Install hooks…**. You get the exact diff of what
-will change in `%USERPROFILE%\.claude\settings.json`, the path of the dated backup
-that will be taken, and nothing is written until you click. Your own hooks are
-never touched, and uninstalling removes only MoMo's entries.
-
-The relay is a tiny executable, `momo-hook.exe`, copied to
-`%LOCALAPPDATA%\MoMo\bin\` at launch. It is given 300 ms to reach MoMo and
-exits cleanly if the app is closed, slow or crashed — **a Claude Code session is
-never blocked or slowed down by MoMo.** If nobody answers a permission request
-in time, MoMo stays quiet and Claude Code asks in the terminal as usual.
-
-It works from any terminal — Windows Terminal, PowerShell, VS Code, Git Bash.
+Enable **Computer actions** to let a tool-capable model open Notepad,
+Calculator, Paint or File Explorer and create notes. Notes are saved under
+`%LOCALAPPDATA%\MoMo\notes` and opened in Notepad. Linux uses available
+equivalent apps and the default text editor. Chat displays actual tool results.
 
 ## Chat and keys
 

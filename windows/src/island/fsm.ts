@@ -17,7 +17,13 @@ export class IslandStateMachine {
   /** momo → petit while the mouse hovers the greeting. */
   greetHoverCollapseDelay = 10;
   /** An alert waiting for an answer stays open, even when the mouse leaves. */
-  pinned = false;
+  private heldOpen = false;
+  get pinned() { return this.heldOpen; }
+  set pinned(value: boolean) {
+    this.heldOpen = value;
+    // A timer scheduled before a chat/alert opened must not close it later.
+    if (value) this.clear("homeCollapse");
+  }
 
   private petitHide: number | null = null;
   private homeCollapse: number | null = null;
@@ -117,7 +123,7 @@ export class IslandStateMachine {
     if (this.pinned) return;
     this.homeCollapse = window.setTimeout(() => {
       this.homeCollapse = null;
-      if (this.state === "home") this.transition("petit");
+      if (this.state === "home" && !this.pinned) this.transition("petit");
     }, this.homeToPetitDelay * 1000);
   }
 

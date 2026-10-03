@@ -1,8 +1,10 @@
-// Settings window: AI profiles, Claude Code hooks and general preferences.
+// Settings window: AI profiles and general preferences.
 
 import "./settings.css";
 import { createAISection } from "./ai";
-import { Bridge, onEvent, type HookStatus } from "../core/bridge";
+import { createLocalSection } from "./local";
+import { smoothSelect } from "../views/select";
+import { Bridge, onEvent } from "../core/bridge";
 import { DEFAULT_SETTINGS, type Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 
@@ -22,6 +24,7 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
   el.addEventListener("click", () => {
     const next = !el.classList.contains("on");
     el.classList.toggle("on", next);
+    el.setAttribute("aria-pressed", String(next));
     onChange(next);
   });
   return el;
@@ -29,145 +32,6 @@ function toggle(on: boolean, onChange: (v: boolean) => void): HTMLElement {
 
 function statusDot(ok: boolean): HTMLElement {
   return h("i", { class: "dot", style: `background:${ok ? "#22c55e" : "#f4505e"}` });
-}
-
-function renderDiff(text: string): HTMLElement {
-  const box = h("div", { class: "diff" });
-  for (const line of text.split("\n")) {
-    const cls = line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx";
-    box.append(h("div", { class: cls, text: line }));
-  }
-  return box;
-}
-
-// ── Claude Code section ───────────────────────────────────────────────────────
-
-function claudeSection(status: HookStatus): HTMLElement {
-  const body = h("div", { style: "display:flex;flex-direction:column;gap:12px" });
-  const section = h(
-    "section",
-    {},
-    h("h2", {}, statusDot(status.installed), h("span", { text: "Claude Code" })),
-    body,
-  );
-
-  const rebuild = async () => {
-    const fresh = await Bridge.hooksStatus();
-    if (fresh) Object.assign(status, fresh);
-    clear(body);
-    draw();
-    const head = section.querySelector("h2")!;
-    clear(head);
-    head.append(statusDot(status.installed), h("span", { text: "Claude Code" }));
-  };
-
-  function draw() {
-    body.append(
-      h("div", {
-        class: "hint",
-        text: status.installed
-          ? "MoMo is hooked into your Claude Code sessions. Tool calls, questions and permission requests show up in the island, and you can answer them there."
-          : "Install the hooks to see your Claude Code sessions in the island and approve permissions without leaving what you are doing.",
-      }),
-      h("div", { class: "row" },
-        h("label", { text: "settings.json" }),
-        h("span", { class: "path", text: status.settingsPath }),
-      ),
-      h("div", { class: "row" },
-        h("label", { text: "Relay" }),
-        h("span", { class: "path", text: status.hookPath }),
-        statusDot(status.hookReady),
-      ),
-    );
-
-    if (!status.hookReady) {
-      body.append(h("div", {
-        class: "notice warn",
-        text: "momo-hook.exe is not in place yet. Restart MoMo; if it still fails, build it with `cargo build -p momo-hook`.",
-      }));
-    }
-
-    const actions = h("div", { class: "row" });
-    const install = h("button", {
-      class: "primary",
-      text: status.installed ? "Reinstall hooks…" : "Install hooks…",
-      onclick: () => showPreview(true),
-    });
-    // Writing hook commands that point at a relay which isn't there would give
-    // every Claude Code session a broken hook and nothing to show for it.
-    if (!status.hookReady) {
-      install.disabled = true;
-      install.title = "The relay isn't installed yet.";
-    }
-    actions.append(install);
-    if (status.installed) {
-      actions.append(h("button", {
-        class: "danger",
-        text: "Uninstall hooks…",
-        onclick: () => showPreview(false),
-      }));
-    }
-    body.append(actions);
-  }
-
-  async function showPreview(install: boolean) {
-    let preview;
-    try {
-      preview = await Bridge.hooksPreview(install);
-    } catch (err) {
-      // An unreadable or invalid settings.json stops here rather than being
-      // treated as empty and written over.
-      clear(body);
-      body.append(
-        h("div", { class: "notice err", text: String(err).replace(/^Error:\s*/, "") }),
-        h("div", { class: "row" }, h("button", {
-          text: "Back",
-          onclick: () => { clear(body); draw(); },
-        })),
-      );
-      return;
-    }
-    if (!preview) return;
-    clear(body);
-    body.append(
-      h("div", {
-        class: "hint",
-        text: install
-          ? "This is exactly what will change in your settings.json. Your own hooks are left untouched."
-          : "This removes MoMo's entries only. Your own hooks are left untouched.",
-      }),
-      renderDiff(preview.diff),
-      h("div", { class: "row" },
-        h("span", { class: "path", text: `Backup → ${preview.backup}` }),
-      ),
-    );
-    const confirm = h("button", {
-      class: install ? "primary" : "danger",
-      text: install ? "Back up and write" : "Back up and remove",
-    });
-    confirm.addEventListener("click", async () => {
-      confirm.disabled = true;
-      try {
-        const backup = await Bridge.hooksApply(install, preview.fingerprint);
-        clear(body);
-        body.append(h("div", {
-          class: "notice ok",
-          text: `Done. Previous settings saved as ${backup}. Open a new Claude Code session to pick the hooks up.`,
-        }));
-        window.setTimeout(() => void rebuild(), 2600);
-      } catch (err) {
-        confirm.disabled = false;
-        body.append(h("div", { class: "notice err", text: `Could not write: ${String(err)}` }));
-      }
-    });
-    body.append(h("div", { class: "row" }, confirm, h("button", {
-      text: "Cancel",
-      onclick: () => { clear(body); draw(); },
-    })));
-  }
-
-  draw();
-  return section;
 }
 
 // ── Service integrations ────────────────────────────────────────────────────
@@ -297,7 +161,7 @@ function generalSection(): HTMLElement {
     void save();
   });
 
-  const screen = h("select", {}) as HTMLSelectElement;
+  const screen = h("select", { "aria-label": "Island lives on" }) as HTMLSelectElement;
   screen.append(
     h("option", { value: "primary", text: "Main display" }),
     h("option", { value: "cursor", text: "Display under the cursor" }),
@@ -324,7 +188,7 @@ function generalSection(): HTMLElement {
     ),
     h("div", { class: "row" },
       h("label", { text: "Island lives on" }),
-      screen,
+      smoothSelect(screen),
     ),
     h("div", { class: "row" },
       h("label", { text: "Launch at startup" }),
@@ -341,9 +205,6 @@ async function main() {
     settings = { ...settings, ...boot.settings };
     version = boot.version;
   }
-  const status = (await Bridge.hooksStatus()) ?? {
-    installed: false, settingsPath: "", hookPath: "", hookReady: false,
-  };
 
   const keys = [
     "stripe-api-key", "github-token", "vercel-token",
@@ -353,11 +214,17 @@ async function main() {
   for (const k of keys) present[k] = (await Bridge.secretPresent(k)) ?? false;
 
   const ai = createAISection(settings.ai, (saved) => { settings = saved; });
+  const control = h("input", { type: "checkbox", "aria-label": "Allow AI desktop actions" });
+  control.checked = settings.computerControl;
+  control.addEventListener("change", () => { settings.computerControl = control.checked; void save(); });
   clear(root);
   root.append(
     h("h1", {}, h("span", { text: "MoMo" }), h("span", { class: "version", text: version })),
+    h("section", {}, h("h2", { text: "Computer actions" }),
+      h("label", { class: "ai-check" }, control, h("span", { text: "Allow AI to open apps and create notes" })),
+      h("p", { class: "hint", text: "Ask MoMo to open Notepad, Calculator, Paint or File Explorer, or write a note. Notes are saved automatically in MoMo's notes folder. Your model must support tool calling. Linux uses available equivalent apps and your default text editor." })),
+    createLocalSection((model, baseUrl) => ai.addLocalModel(model, baseUrl)),
     ai.el,
-    claudeSection(status),
     integrationsSection(present),
     generalSection(),
     h("div", {
@@ -368,6 +235,7 @@ async function main() {
 
   void onEvent<Settings>("settings-changed", (s) => {
     settings = { ...settings, ...s };
+    control.checked = settings.computerControl;
     ai.update(s.ai);
   });
 }

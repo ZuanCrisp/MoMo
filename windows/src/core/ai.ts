@@ -28,6 +28,7 @@ export interface AIReply {
   model: string;
   usedFallback: boolean;
   keyLabel: string | null;
+  actions?: { name: string; detail: string; success: boolean; path: string | null }[];
 }
 
 export const PROVIDERS: { id: AIProvider; label: string; url: string; hint: string; keyHint: string; local?: boolean; search?: boolean }[] = [

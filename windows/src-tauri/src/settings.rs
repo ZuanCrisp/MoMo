@@ -22,6 +22,10 @@ pub struct Settings {
     pub model: String,
     #[serde(default)]
     pub ai: crate::ai::Config,
+    #[serde(default)]
+    pub computer_control: bool,
+    #[serde(default)]
+    pub local_models_directory: String,
 }
 
 fn default_model() -> String {
@@ -46,6 +50,8 @@ impl Default for Settings {
             hooks_installed: false,
             model: default_model(),
             ai: crate::ai::Config::default(),
+            computer_control: false,
+            local_models_directory: String::new(),
         }
     }
 }

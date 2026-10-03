@@ -1,5 +1,6 @@
 mod chat;
 pub mod config;
+mod desktop_tools;
 mod providers;
 
 use std::collections::{HashMap, HashSet};
@@ -7,7 +8,8 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{secrets, settings::Settings};
-pub use chat::{send, Chat, ChatContext, ChatReply};
+pub use chat::send_controlled;
+pub use chat::{Chat, ChatContext, ChatReply};
 pub use config::{Config, Profile};
 pub use providers::Model;
 

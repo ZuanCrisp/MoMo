@@ -1,5 +1,6 @@
 import { h, svg, clear } from "./dom";
 import { ICONS } from "./icons";
+import { smoothSelect, syncSelect } from "./select";
 import { Bridge, type ChatContext } from "../core/bridge";
 import { providerInfo } from "../core/ai";
 import { Sound } from "../core/sound";
@@ -16,7 +17,8 @@ function bubble(message: ChatMessage): HTMLElement {
   return h("div", { class: "chat-row" }, h("div", { class: "chat-answer" },
     route ? h("div", { class: "chat-route", text: `${route.profileName} · ${route.model}${route.usedFallback ? " · fallback" : ""}`,
       title: route.keyLabel ? `Key: ${route.keyLabel}` : "Local model" }) : null,
-    h("div", { class: "reply", text: message.content })));
+    h("div", { class: "reply", text: message.content }),
+    ...(route?.actions || []).map(action => h("div", { class: `chat-action${action.success ? "" : " failed"}`, text: `${action.success ? "✓" : "!"} ${action.detail}`, title: action.path || "" }))));
 }
 
 function typingDots(): HTMLElement {
@@ -39,7 +41,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   const send = h("button", { class: "send-btn", title: "Send", "aria-label": "Send message" }, svg(ICONS.arrowUp, 11));
   const el = h("div", { class: "view" },
     h("div", { class: "card wash chat-card" }, h("div", { class: "chat-body" },
-      h("div", { class: "chat-toolbar" }, profile, manage), chipRow, log, error, h("div", { class: "chat-bar" }, input, send))));
+      h("div", { class: "chat-toolbar" }, smoothSelect(profile), manage), chipRow, log, error, h("div", { class: "chat-bar" }, input, send))));
   (el.querySelector(".card") as HTMLElement).style.setProperty("--wash", "rgba(99,102,241,0.5)");
 
   let sending = false;
@@ -110,6 +112,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
       }
       profile.value = ai.activeProfileId;
       profile.disabled = sending || selecting || !ai.profiles.length;
+      syncSelect(profile);
       const active = ai.profiles.find(p => p.id === ai.activeProfileId);
       const ready = !!active?.model;
       const wantChip = State.droppedFile?.name ?? "";

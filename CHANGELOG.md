@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 — Windows / Linux
+
+- Smooth themed dropdowns with keyboard navigation, selection markers and menus that fit the chat card.
+- Taller native island window, softer frame and corners; the growing chat and bottom input no longer clip.
+- Chat stays open while reading, loading a model or opening another app; Escape and navigation still close it normally.
+- Removed hook installation controls and the missing-hooks warning from the user interface.
+- Local AI setup detects a downloaded Ollama library, checks complete models and starts a separate loopback server using that folder. The model folder and large model formats are excluded from Git and installers.
+- Optional desktop tools open supported apps and create new UTF-8 notes in Notepad on Windows, or available editors on Linux. Actual action results appear in chat.
+- Tool calling for all six providers preserves call IDs, Gemini signatures and provider reasoning. Repeated calls within a turn are deduplicated; cancellation or an API error after an action reports the completed action without retrying another route.
+
+Native macOS source is unchanged by this update.
+
 ## 0.2.0 — Windows / Linux
 
 - AI model profiles for Claude, OpenAI / ChatGPT, Gemini, other OpenAI-compatible APIs, Ollama and local OpenAI-compatible servers.

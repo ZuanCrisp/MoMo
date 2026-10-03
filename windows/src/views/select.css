@@ -1,0 +1,29 @@
+.smooth-select { min-width: 0; width: 100%; }
+.smooth-select [hidden] { display: none !important; }
+.select-button {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; min-height: 36px; padding: 8px 12px; border-radius: 11px;
+  background: #22242b; border: 1px solid rgba(255,255,255,.09); color: #edf0f6;
+  font: 500 12px/1.4 var(--font); text-align: left; cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.select-button:hover:not(:disabled) { background: #2b2d37; border-color: rgba(165,180,252,.35); }
+.select-button:focus-visible { outline: none; border-color: #9daaf8; box-shadow: 0 0 0 3px rgba(129,140,248,.16); }
+.select-button[aria-expanded=true] { border-color: rgba(165,180,252,.6); background: #272a34; }
+.select-button:disabled { opacity: .5; cursor: default; }
+.select-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-chevron { flex-shrink: 0; color: #a5aaba; font-size: 16px; transition: transform .18s ease; }
+.select-button[aria-expanded=true] .select-chevron { transform: rotate(180deg); }
+.select-menu {
+  position: fixed; z-index: 10000; overflow: auto; padding: 5px; border-radius: 13px;
+  background: #20222b; border: 1px solid rgba(165,180,252,.22);
+  box-shadow: 0 12px 30px rgba(0,0,0,.38); color: #edf0f6;
+  font: 400 12px/1.5 var(--font); scrollbar-width: thin;
+  animation: select-appear .16s cubic-bezier(.2,.8,.2,1);
+}
+.select-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; padding: 8px 10px; border-radius: 8px; cursor: pointer; overflow-wrap: anywhere; }
+.select-option.highlighted { background: rgba(129,140,248,.16); }
+.select-option[aria-selected=true] { color: #c7d0ff; }
+.select-check { flex: 0 0 14px; }
+@keyframes select-appear { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .select-menu { animation: none; } .select-button, .select-chevron { transition: none; } }

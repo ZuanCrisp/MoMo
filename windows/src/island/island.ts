@@ -492,7 +492,7 @@ export class Island {
     }
   }
 
-  /** Island rect in window coordinates (origin top-left of the 720×320 window). */
+  /** Island rect in window coordinates (origin top-left of the 720×420 window). */
   private islandRect(): { x: number; y: number; w: number; h: number } {
     const w = this.width.value;
     const hh = this.height.value;
@@ -592,7 +592,7 @@ export class Island {
     }
     if (!inIsland && this.wasInIsland) {
       this.fsm.mouseLeft();
-      if (this.fsm.state === "home" && !State.isPinned) {
+      if (this.fsm.state === "home" && !this.fsm.pinned) {
         this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
       }
     }
@@ -819,7 +819,7 @@ export class Island {
   }
 
   private updateCountdown(nowMs: number) {
-    if (State.mode !== "expanded" || State.isPinned || this.homeCollapseAt == null) {
+    if (State.mode !== "expanded" || this.fsm.pinned || this.homeCollapseAt == null) {
       this.countdown.style.width = "0px";
       return;
     }
@@ -834,6 +834,14 @@ export class Island {
 
   private syncDom() {
     const expanded = State.mode === "expanded";
+    const wasPinned = this.fsm.pinned;
+    // Chat remains readable when a tool opens another app or a model loads.
+    this.fsm.pinned = State.isPinned || expanded && State.view === "prompt";
+    if (this.fsm.pinned) this.homeCollapseAt = null;
+    else if (wasPinned && !this.wasInIsland && this.fsm.state === "home") {
+      this.fsm.mouseLeft();
+      this.homeCollapseAt = performance.now() + State.settings.autoCloseInterval * 1000;
+    }
     const greetingActive = expanded && State.view === "greeting";
 
     this.contentEl.style.opacity = expanded && !greetingActive ? "1" : "0";

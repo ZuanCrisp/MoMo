@@ -1,6 +1,6 @@
 # AI dan model di MoMo
 
-Fitur ini tersedia pada MoMo **0.2.0 untuk Windows/Linux**. Integrasi Claude Code tetap di bagian pengaturan tersendiri. Versi macOS belum memakai panel ini.
+Fitur ini tersedia pada MoMo **0.3.0 untuk Windows/Linux**. Versi macOS belum memakai panel ini.
 
 ## Memilih AI online
 
@@ -21,10 +21,12 @@ MoMo terhubung ke server model yang berjalan pada perangkat. MoMo tidak memasang
 
 **Ollama**
 
-1. Pasang [Ollama](https://docs.ollama.com/) dan unduh model yang cocok dengan RAM/VRAM perangkat, misalnya model keluarga Llama.
-2. Jalankan server Ollama, lalu tambah profil **Ollama · local** di MoMo.
-3. Biarkan URL `http://127.0.0.1:11434`, klik **Load models**, dan pilih model yang sudah diunduh. Model cloud Ollama tidak ditawarkan pada profil lokal.
-4. API key biasanya tidak diperlukan. Klik **Use as active model → Save changes**.
+1. Pasang [Ollama](https://docs.ollama.com/) dan sediakan model yang cocok dengan RAM/VRAM perangkat.
+2. Buka **Settings → Local AI · offline**. Isi folder Ollama yang berisi `blobs` dan `manifests`; folder `Local AI Models` di dekat project/aplikasi terdeteksi otomatis jika tersedia.
+3. Klik **Check folder → Start local AI**. MoMo menjalankan server sendiri di `http://127.0.0.1:11435` dengan [OLLAMA_MODELS](https://docs.ollama.com/faq#how-do-i-set-them-to-a-different-location) menunjuk folder tersebut dan cloud dimatikan. Server Ollama lain pada port 11434 tetap dapat digunakan melalui profil manual.
+4. Pilih model yang terdeteksi, klik **Add model profile → Save changes**. Profil lokal menjadi aktif tanpa API key. Sesudah restart MoMo, server dari folder tersimpan dijalankan kembali.
+
+Pilih model kecil dahulu jika RAM/VRAM terbatas, misalnya Llama 3.2 3B. Daftar mengecualikan embedding/cloud dan manifest yang blob-nya belum lengkap. File GGUF terpisah perlu diimpor ke Ollama atau dimuat melalui LM Studio. Folder `Local AI Models` serta format model besar dikecualikan dari Git; model dan runtime tidak dibundel ke installer. Perangkat lain dapat memilih lokasi foldernya sendiri.
 
 **LM Studio / llama.cpp / server lokal yang kompatibel dengan OpenAI**
 
@@ -45,6 +47,16 @@ Setiap profil mewakili satu provider, model, dan daftar key. Buat profil terpisa
 - Seluruh profil fallback menerima percakapan dan lampiran yang sama. Jika profil lokal memiliki fallback online yang aktif, percakapan dapat dikirim ke provider online saat lokal gagal; panel menampilkan pemberitahuan ini. Biarkan fallback mati atau pilih hanya profil lokal untuk penggunaan lokal saja.
 
 Pemilih di bagian atas chat mengganti profil aktif yang sudah disimpan tanpa menghapus percakapan. Profil yang baru menjadi aktif dikeluarkan dari daftar fallback. Jawaban menampilkan profil/model yang benar-benar menjawab, dengan tanda `fallback` bila key/model cadangan dipakai. Tombol **Stop** membatalkan permintaan. Pesan yang gagal dikembalikan ke kolom input agar mudah dicoba lagi.
+
+## Membuka aplikasi dan membuat catatan
+
+Aktifkan **Settings → Computer actions → Allow AI to open apps and create notes**. Contoh: `Buka Notepad` atau `Buat catatan belanja di Notepad: beras, telur, kopi`. Di Windows, aplikasi yang tersedia adalah Notepad, Calculator, Paint dan File Explorer. Linux memakai editor/aplikasi setara yang terpasang. Catatan baru disimpan otomatis di folder data lokal MoMo (`%LOCALAPPDATA%\MoMo\notes` pada Windows), memakai UTF-8 dan tidak menimpa catatan yang sudah ada.
+
+Model harus mendukung function/tool calling. Adapter menyediakan format tool untuk [OpenAI](https://developers.openai.com/api/docs/guides/function-calling), [Gemini](https://ai.google.dev/gemini-api/docs/function-calling), [Claude](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools), [Ollama](https://docs.ollama.com/capabilities/tool-calling), serta server kompatibel OpenAI. Hasil tindakan nyata muncul di chat. Jika koneksi gagal atau Stop ditekan setelah tindakan berjalan, MoMo tetap melaporkan tindakan tersebut dan tidak mencoba provider lain untuk mengulangnya. Untuk Gemini, mode tindakan memakai custom tools; pencarian Google bawaan tidak digabungkan dalam permintaan tersebut.
+
+Fitur saat ini mencakup pembukaan aplikasi dan catatan teks. Klik mouse, pengetikan pada aplikasi lain dan navigasi desktop umum belum tersedia.
+
+Panel chat tetap terbuka saat model dimuat atau aplikasi lain dibuka agar hasilnya dapat dibaca. Gunakan **Esc** untuk menutup atau pindah ke Overview untuk kembali ke perilaku auto-close.
 
 ## Penyimpanan dan lampiran
 

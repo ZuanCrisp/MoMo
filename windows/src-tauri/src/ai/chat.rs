@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
 use super::config::Config;
+use super::desktop_tools::{self, Journal};
 use super::providers::{self, Retry};
 
 #[derive(Clone)]
@@ -29,6 +30,7 @@ pub struct Chat {
     messages: Mutex<Vec<Message>>,
     turn: tokio::sync::Mutex<()>,
     generation: AtomicU64,
+    resets: AtomicU64,
     cancelled: Notify,
 }
 
@@ -42,6 +44,7 @@ impl Chat {
     pub fn reset(&self) {
         let mut history = self.messages.lock().unwrap();
         history.clear();
+        self.resets.fetch_add(1, Ordering::SeqCst);
         self.generation.fetch_add(1, Ordering::SeqCst);
         self.cancelled.notify_waiters();
     }
@@ -61,7 +64,7 @@ pub enum ChatContext {
     },
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Clone, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatReply {
     pub text: String,
@@ -70,8 +73,10 @@ pub struct ChatReply {
     pub model: String,
     pub used_fallback: bool,
     pub key_label: Option<String>,
+    pub actions: Vec<crate::desktop::Action>,
 }
 
+#[cfg(test)]
 pub async fn send<F>(
     chat: &Chat,
     config: &Config,
@@ -82,6 +87,31 @@ pub async fn send<F>(
 where
     F: Fn(&str) -> Result<Option<String>, String> + Sync,
 {
+    send_controlled(
+        chat,
+        config,
+        query,
+        context,
+        read_key,
+        false,
+        crate::desktop::execute,
+    )
+    .await
+}
+
+pub async fn send_controlled<F, E>(
+    chat: &Chat,
+    config: &Config,
+    query: String,
+    context: Option<ChatContext>,
+    read_key: F,
+    computer_control: bool,
+    execute: E,
+) -> Result<ChatReply, String>
+where
+    F: Fn(&str) -> Result<Option<String>, String> + Sync,
+    E: Fn(&str, &serde_json::Value) -> crate::desktop::Action + Sync,
+{
     let _turn = chat
         .turn
         .try_lock()
@@ -90,6 +120,7 @@ where
     tokio::pin!(cancelled);
     cancelled.as_mut().enable();
     let generation = chat.generation.load(Ordering::SeqCst);
+    let resets = chat.resets.load(Ordering::SeqCst);
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 32000 {
         return Err("Enter a message of 1–32000 characters.".into());
@@ -131,15 +162,39 @@ where
         parts,
     };
     messages.push(user.clone());
-    let reply = tokio::select! {
-        _ = &mut cancelled => return Err("Request cancelled.".into()),
-        result = tokio::time::timeout(Duration::from_secs(900), run_routes(config, &messages, read_key)) => {
-            result.map_err(|_| "The fallback chain took too long. Check the selected profiles or shorten their timeouts.")??
+    let journal = Journal::default();
+    let result = tokio::select! {
+        _ = &mut cancelled => Err("Request cancelled.".to_string()),
+        result = tokio::time::timeout(Duration::from_secs(900), run_routes(config, &messages, read_key, computer_control, &journal, &execute)) => {
+            result.unwrap_or_else(|_| Err("The fallback chain took too long. Check the selected profiles or shorten their timeouts.".into()))
         }
     };
+    let actions = journal.actions();
+    let mut reply = match result {
+        Ok(reply) => reply,
+        Err(error) if !actions.is_empty() => {
+            // A network failure/cancellation cannot hide actions already performed,
+            // restore the question for an accidental retry, or run another route.
+            let mut route = journal.route.lock().unwrap().clone().expect("action route");
+            route.text = format!(
+                "{error}\n\nDesktop actions completed before the request stopped:\n{}",
+                actions
+                    .iter()
+                    .map(|a| a.detail.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+            route
+        }
+        Err(error) => return Err(error),
+    };
+    reply.actions = actions;
     let mut history = chat.messages.lock().unwrap();
-    if chat.generation.load(Ordering::SeqCst) != generation {
+    if chat.generation.load(Ordering::SeqCst) != generation && reply.actions.is_empty() {
         return Err("Request cancelled.".into());
+    }
+    if chat.resets.load(Ordering::SeqCst) != resets {
+        return Ok(reply);
     }
     // Commit exactly one turn, only after a successful reply. Retries and failed
     // requests never duplicate user messages or corrupt the conversation.
@@ -151,13 +206,17 @@ where
     Ok(reply)
 }
 
-async fn run_routes<F>(
+async fn run_routes<F, E>(
     config: &Config,
     messages: &[Message],
     read_key: F,
+    computer_control: bool,
+    journal: &Journal,
+    execute: &E,
 ) -> Result<ChatReply, String>
 where
     F: Fn(&str) -> Result<Option<String>, String> + Sync,
+    E: Fn(&str, &serde_json::Value) -> crate::desktop::Action + Sync,
 {
     let mut config = config.clone();
     config.validate()?;
@@ -189,7 +248,21 @@ where
             continue;
         }
         for (key, label, fallback_key) in keys {
-            match providers::complete(profile, key.as_deref(), messages).await {
+            *journal.route.lock().unwrap() = Some(ChatReply {
+                text: String::new(),
+                profile_id: profile.id.clone(),
+                profile_name: profile.name.clone(),
+                model: profile.model.clone(),
+                used_fallback: profile_index > 0 || fallback_key,
+                key_label: label.clone(),
+                actions: vec![],
+            });
+            let result = if computer_control {
+                desktop_tools::complete(profile, key.as_deref(), messages, journal, execute).await
+            } else {
+                providers::complete(profile, key.as_deref(), messages).await
+            };
+            match result {
                 Ok(text) => {
                     return Ok(ChatReply {
                         text,
@@ -198,11 +271,12 @@ where
                         model: profile.model.clone(),
                         used_fallback: profile_index > 0 || fallback_key,
                         key_label: label,
+                        actions: journal.actions(),
                     })
                 }
                 Err(error) => {
                     let message = format!("{}: {}", profile.name, error.message);
-                    if error.retry == Retry::Stop {
+                    if error.retry == Retry::Stop || !journal.actions().is_empty() {
                         return Err(message);
                     }
                     errors.push(message);
@@ -364,6 +438,137 @@ mod tests {
         serde_json::json!({"choices":[{"message":{"content":text}}]}).to_string()
     }
 
+    fn app_call(provider: Provider) -> serde_json::Value {
+        use serde_json::json;
+        match provider {
+            Provider::Anthropic => {
+                json!({"content":[{"type":"tool_use","id":"call-1","name":"open_app","input":{"app":"notepad"}}]})
+            }
+            Provider::Gemini => {
+                json!({"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"open_app","args":{"app":"notepad"}},"thoughtSignature":"kept-signature"}]}}]})
+            }
+            Provider::Openai => {
+                json!({"output":[{"type":"function_call","call_id":"call-1","name":"open_app","arguments":"{\"app\":\"notepad\"}"}]})
+            }
+            Provider::Ollama => {
+                json!({"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"open_app","arguments":{"app":"notepad"}}}]}})
+            }
+            _ => {
+                json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"open_app","arguments":"{\"app\":\"notepad\"}"}}]}}]})
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn desktop_tools_round_trip_through_every_provider() {
+        use serde_json::json;
+        for (provider, final_reply) in [
+            (
+                Provider::Anthropic,
+                json!({"content":[{"type":"text","text":"Opened"}]}),
+            ),
+            (
+                Provider::Gemini,
+                json!({"candidates":[{"content":{"parts":[{"text":"Opened"}]}}]}),
+            ),
+            (
+                Provider::Openai,
+                json!({"output":[{"type":"message","content":[{"type":"output_text","text":"Opened"}]}]}),
+            ),
+            (Provider::Ollama, json!({"message":{"content":"Opened"}})),
+            (
+                Provider::LocalOpenai,
+                json!({"choices":[{"message":{"content":"Opened"}}]}),
+            ),
+            (
+                Provider::OpenaiCompatible,
+                json!({"choices":[{"message":{"content":"Opened"}}]}),
+            ),
+        ] {
+            let (url, rx, thread) = server(vec![
+                (200, app_call(provider).to_string()),
+                (200, final_reply.to_string()),
+            ]);
+            let mut c = config(url);
+            c.profiles[0].provider = provider;
+            if provider.is_local() {
+                c.profiles[0].keys.clear();
+            }
+            let count = std::sync::atomic::AtomicUsize::new(0);
+            let execute = |name: &str, args: &serde_json::Value| {
+                assert_eq!(name, "open_app");
+                assert_eq!(args["app"], "notepad");
+                count.fetch_add(1, Ordering::SeqCst);
+                crate::desktop::Action {
+                    name: name.into(),
+                    detail: "Opened Notepad".into(),
+                    success: true,
+                    path: None,
+                }
+            };
+            let journal = Journal::default();
+            let messages = vec![Message {
+                role: "user",
+                parts: vec![Part::Text("Open Notepad".into())],
+            }];
+            let reply = desktop_tools::complete(
+                &c.profiles[0],
+                if provider.is_local() {
+                    None
+                } else {
+                    Some("fake-key")
+                },
+                &messages,
+                &journal,
+                execute,
+            )
+            .await
+            .unwrap();
+            assert_eq!(reply, "Opened");
+            assert_eq!(journal.actions().len(), 1);
+            assert_eq!(count.load(Ordering::SeqCst), 1);
+            assert!(rx.recv().unwrap().contains("create_note"));
+            let follow_up = rx.recv().unwrap();
+            assert!(follow_up.contains("Opened Notepad"));
+            if provider == Provider::Gemini {
+                assert!(follow_up.contains("kept-signature"));
+            }
+            thread.join().unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn api_failure_after_a_desktop_action_does_not_retry_it_or_hide_the_result() {
+        let (url, rx, thread) = server(vec![
+            (200, app_call(Provider::OpenaiCompatible).to_string()),
+            (503, "{}".into()),
+        ]);
+        let chat = Chat::default();
+        let execute = |name: &str, _: &serde_json::Value| crate::desktop::Action {
+            name: name.into(),
+            detail: "Opened Notepad".into(),
+            success: true,
+            path: None,
+        };
+        let reply = send_controlled(
+            &chat,
+            &config(url),
+            "Open Notepad".into(),
+            None,
+            key,
+            true,
+            execute,
+        )
+        .await
+        .unwrap();
+        assert!(reply.text.contains("HTTP 503"));
+        assert_eq!(reply.actions.len(), 1);
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        thread.join().unwrap();
+        assert_eq!(chat.messages.lock().unwrap().len(), 2);
+    }
+
     #[tokio::test]
     async fn failed_key_retries_without_duplicate_history_and_masks_error_bodies() {
         let (url, rx, thread) = server(vec![
@@ -385,6 +590,49 @@ mod tests {
         assert!(second.contains("Bearer fake-second"));
         assert_eq!(chat.messages.lock().unwrap().len(), 2);
         assert_eq!(second.matches("hello").count(), 1);
+    }
+
+    #[tokio::test]
+    async fn cancel_or_reset_after_an_action_keeps_its_result_without_restoring_reset_history() {
+        for reset in [false, true] {
+            let (url, rx, thread) = server(vec![(
+                200,
+                app_call(Provider::OpenaiCompatible).to_string(),
+            )]);
+            let chat = Chat::default();
+            let execute = |name: &str, _: &serde_json::Value| {
+                if reset {
+                    chat.reset();
+                } else {
+                    chat.cancel();
+                }
+                crate::desktop::Action {
+                    name: name.into(),
+                    detail: "Opened Notepad".into(),
+                    success: true,
+                    path: None,
+                }
+            };
+            let reply = send_controlled(
+                &chat,
+                &config(url),
+                "Open Notepad".into(),
+                None,
+                key,
+                true,
+                execute,
+            )
+            .await
+            .unwrap();
+            assert_eq!(reply.actions.len(), 1);
+            assert!(reply.text.contains("Opened Notepad"));
+            assert_eq!(
+                chat.messages.lock().unwrap().len(),
+                if reset { 0 } else { 2 }
+            );
+            rx.recv().unwrap();
+            thread.join().unwrap();
+        }
     }
 
     #[tokio::test]

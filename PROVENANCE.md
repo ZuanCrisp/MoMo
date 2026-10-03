@@ -18,6 +18,7 @@ The original source copyright and MIT license are retained in `LICENSE`. The ori
 - A local toolchain launcher, portable build documentation and Windows build validation are included.
 - Rust source is formatted with Rustfmt.
 - Windows/Linux version 0.2.0 adds multi-provider AI profiles, local model connections, ordered key/model fallback, credential migration and a new settings/chat interface with protocol and UI tests.
+- Windows/Linux version 0.3.0 adds themed dropdowns, fixes island clipping, removes hook installation UI, provides Ollama library setup and adds bounded AI desktop tools for opening apps and creating notes. Model files remain outside Git and distribution packages.
 
 Original character artwork, icons, animations, sounds and demo media remain upstream assets governed by their separate license. The rebrand does not grant additional rights to them.
 

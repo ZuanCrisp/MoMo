@@ -2,6 +2,7 @@ import { Bridge } from "../core/bridge";
 import { PROVIDERS, providerInfo, type AIConfig, type AIProfile, type AIProvider, type AIModel, type AIKeyStatus } from "../core/ai";
 import type { Settings } from "../core/state";
 import { h, clear } from "../views/dom";
+import { smoothSelect, syncSelect } from "../views/select";
 
 const clone = <T>(value: T): T => structuredClone(value);
 const message = (error: unknown) => String(error).replace(/^Error:\s*/, "");
@@ -9,7 +10,8 @@ const newId = () => crypto.randomUUID();
 
 function field(label: string, input: HTMLInputElement | HTMLSelectElement, hint?: string) {
   input.id ||= `ai-${newId()}`;
-  return h("div", { class: "ai-field" }, h("label", { for: input.id, text: label }), input,
+  const id = input.id;
+  return h("div", { class: "ai-field" }, h("label", { for: id, text: label }), input instanceof HTMLSelectElement ? smoothSelect(input) : input,
     hint ? h("span", { class: "hint", text: hint }) : null);
 }
 
@@ -160,9 +162,10 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
       for (const item of available) chooser.append(h("option", { value: item.id, text: item.label === item.id ? item.id : `${item.label} · ${item.id}` }));
       chooser.value = available.some(model => model.id === profile.model) ? profile.model : "";
       chooser.disabled = !available.length;
+      syncSelect(chooser);
     }
     fillModels();
-    modelInput.addEventListener("input", () => { profile.model = modelInput.value; chooser.value = profile.model; changed(); });
+    modelInput.addEventListener("input", () => { profile.model = modelInput.value; chooser.value = profile.model; syncSelect(chooser); changed(); });
     chooser.addEventListener("change", () => { if (chooser.value) { profile.model = chooser.value; modelInput.value = chooser.value; changed(); } });
     load.addEventListener("click", async () => {
       const loadingEpoch = epoch;
@@ -179,7 +182,7 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
         if (load.isConnected) { load.disabled = false; load.textContent = "Load models"; }
       }
     });
-    const modelGroup = h("div", { class: "ai-model-group" }, h("div", { class: "ai-model-label" }, h("h3", { text: "Model" }), load), chooser, field("Model ID", modelInput), modelHint);
+    const modelGroup = h("div", { class: "ai-model-group" }, h("div", { class: "ai-model-label" }, h("h3", { text: "Model" }), load), smoothSelect(chooser), field("Model ID", modelInput), modelHint);
 
     const keys = h("div", { class: "ai-keys" });
     const addKey = h("button", { type: "button", text: "+ Add API key" });
@@ -331,6 +334,19 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
   void refreshStatus();
   return {
     el,
+    addLocalModel(model: string, baseUrl: string) {
+      let profile = config.profiles.find(p => p.provider === "ollama" && p.baseUrl === baseUrl && p.model === model);
+      if (!profile) {
+        if (config.profiles.length >= 32) { notice("Delete an unused profile before adding another model.", "warn"); return; }
+        profile = { id: newId(), name: model, provider: "ollama", baseUrl, model, keys: [], maxOutputTokens: 2048, timeoutSeconds: 300, webSearch: false };
+        config.profiles.push(profile);
+      }
+      config.activeProfileId = profile.id;
+      config.fallbackProfileIds = config.fallbackProfileIds.filter(id => id !== profile.id);
+      selectedId = profile.id; tab = "profiles"; changed(); draw();
+      notice("Local model selected. Click Save changes to use it in chat. No API key is needed.");
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
+    },
     update(next: AIConfig) {
       stored = clone(next);
       if (!dirty && !saving) { config = clone(next); if (!config.profiles.some(p => p.id === selectedId)) selectedId = config.activeProfileId; draw(); }

@@ -17,6 +17,10 @@ Installer MoMo belum ditandatangani secara digital. Pemasangan diuji pada perang
 
 Buka **Settings → AI & models** untuk memilih provider/model, key utama/cadangan, atau server model lokal. Ikuti [panduan AI](docs/AI-MODELS.md). Installer tidak memuat credential pribadi.
 
+Untuk model Ollama yang sudah diunduh, buka **Settings → Local AI · offline**. Periksa folder berisi `blobs` dan `manifests`, klik **Start local AI**, pilih model, lalu **Add model profile → Save changes**. MoMo memakai folder yang dipilih tanpa menyalin atau mengunduh ulang model. Pada perangkat lain, pasang Ollama dan salin model secara terpisah; file besar ini tidak masuk installer atau GitHub.
+
+Aktifkan **Computer actions → Allow AI to open apps and create notes** untuk meminta AI membuka Notepad, Calculator, Paint, File Explorer atau membuat catatan. Pilih model yang mendukung tool calling. Catatan disimpan di `%LOCALAPPDATA%\MoMo\notes` dan dibuka di Notepad.
+
 ## Membuat installer dari source
 
 Pasang Node.js 22, Rust stable MSVC, C++ Build Tools dan WebView2 sesuai [prasyarat Tauri](https://v2.tauri.app/start/prerequisites/#windows). Buka terminal baru setelah pemasangan agar PATH diperbarui.
@@ -32,8 +36,8 @@ npm.cmd run pack
 Hasil build:
 
 ```text
-windows/release/0.2.0/
-  MoMo-0.2.0-Windows-x64-Setup.exe
+windows/release/0.3.0/
+  MoMo-0.3.0-Windows-x64-Setup.exe
   README.md
 ```
 
@@ -48,12 +52,12 @@ Alternatif: buka **Actions → Windows → Run workflow** di GitHub, lalu unduh 
 Dari folder installer:
 
 ```powershell
-.\MoMo-0.2.0-Windows-x64-Setup.exe /S
+.\MoMo-0.3.0-Windows-x64-Setup.exe /S
 ```
 
 ## Menghapus aplikasi
 
-Jika pernah memasang hook integrasi, gunakan **Uninstall hooks** di pengaturan MoMo terlebih dahulu. Kemudian buka **Windows Settings → Apps → MoMo → Uninstall**.
+Buka **Windows Settings → Apps → MoMo → Uninstall**.
 
 ## Lisensi source
 
