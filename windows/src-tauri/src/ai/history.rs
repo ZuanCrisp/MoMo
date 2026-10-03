@@ -63,13 +63,15 @@ impl Default for History {
         #[cfg(not(test))]
         let path = crate::settings::local_dir().join("chat-history.json");
         #[cfg(test)]
-        let path = std::env::temp_dir().join(format!(
-            "momo-chat-test-{}.json",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
-        ));
+        let path = std::env::temp_dir()
+            .join(format!(
+                "momo-chat-test-{}",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            ))
+            .join("history.json");
         Self::load(path)
     }
 }
@@ -236,7 +238,9 @@ mod tests {
     use super::*;
     #[test]
     fn history_round_trip_restores_receipts_and_delete_persists() {
-        let path = std::env::temp_dir().join(format!("momo-history-{}.json", now()));
+        let path = std::env::temp_dir()
+            .join(format!("momo-history-{}", now()))
+            .join("history.json");
         let mut history = History::load(path.clone());
         let reply = ChatReply {
             text: "Saved note".into(),
@@ -261,6 +265,7 @@ mod tests {
         let mut damaged = History::load(path.clone());
         assert!(damaged.record("new", &reply).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"invalid");
-        std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(&path).unwrap();
+        std::fs::remove_dir(path.parent().unwrap()).unwrap();
     }
 }

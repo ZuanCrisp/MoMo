@@ -86,7 +86,7 @@ Untuk RTX 5060 8 GB dengan RAM sekitar 16 GB, gunakan model 3B/4B sebagai titik 
 
 1. Pilih model pada **Local AI · offline → Add model profile**.
 2. Pada profil Ollama, klik **Inspect model** untuk membaca ukuran, kuantisasi, batas konteks dan kemampuan dari server.
-3. Klik **Balanced · 8 GB VRAM → Save changes**: konteks 4096, output 2048, timeout 300 detik dan keep-alive 5 menit. Sampling mengikuti default model.
+3. Klik **Balanced · 8 GB VRAM → Save changes**: konteks 4096, output 4096, timeout 300 detik dan keep-alive 5 menit. Sampling mengikuti default model.
 4. **Adaptive · automatic** memilih thinking off/on untuk model yang mendukungnya, atau low/medium untuk model seperti GPT-OSS. Pesan pendek memakai usaha lebih rendah; analisis, debugging, matematika dan pesan panjang memakai usaha lebih tinggi. Ini kebijakan pemilihan MoMo, sehingga model yang tidak mendukung pengaturan reasoning tetap memakai defaultnya. Nilai dari metadata Ollama diprioritaskan; runtime lama memakai kontrol family yang dikenal untuk Qwen3/Qwen3.5 dan GPT-OSS.
 
 Server yang dimiliki MoMo membatasi satu model/satu permintaan paralel, mengaktifkan Flash Attention serta cache KV q8_0 untuk mengurangi pemakaian memori. Ini hanya mengatur server MoMo pada port 11435. [Dokumentasi memori Ollama](https://docs.ollama.com/faq) dan [kontrol thinking](https://docs.ollama.com/capabilities/thinking).

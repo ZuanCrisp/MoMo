@@ -41,7 +41,7 @@ export interface ModelDetails {
   capabilities: string[]; thinkingValues: (string | boolean)[]; legacyThinkingControls: boolean;
 }
 export const LOCAL_DEFAULTS = { localContextTokens: 4096, reasoning: "default", keepAliveMinutes: 5 };
-export const LOCAL_BALANCED = { localContextTokens: 4096, reasoning: "adaptive", keepAliveMinutes: 5, maxOutputTokens: 2048, timeoutSeconds: 300 };
+export const LOCAL_BALANCED = { localContextTokens: 4096, reasoning: "adaptive", keepAliveMinutes: 5, maxOutputTokens: 4096, timeoutSeconds: 300 };
 
 export const PROVIDERS: { id: AIProvider; label: string; url: string; hint: string; keyHint: string; local?: boolean; search?: boolean }[] = [
   { id: "anthropic", label: "Claude · Anthropic", url: "https://api.anthropic.com/v1", hint: "Use an Anthropic API key, then choose a Claude model.", keyHint: "Paste your Anthropic API key", search: true },

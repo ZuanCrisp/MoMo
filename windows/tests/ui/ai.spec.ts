@@ -243,5 +243,5 @@ test("8 GB preset and inspected reasoning save model-specific local parameters",
   await choose(page, "Local reasoning", "Thinking off");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   const active = await page.evaluate(() => { const ai = (window as any).aiTest.settings.ai; return ai.profiles.find((p: any) => p.id === ai.activeProfileId); });
-  expect(active.localContextTokens).toBe(4096); expect(active.keepAliveMinutes).toBe(5); expect(active.reasoning).toBe("off"); expect(active.maxOutputTokens).toBe(2048);
+  expect(active.localContextTokens).toBe(4096); expect(active.keepAliveMinutes).toBe(5); expect(active.reasoning).toBe("off"); expect(active.maxOutputTokens).toBe(4096);
 });

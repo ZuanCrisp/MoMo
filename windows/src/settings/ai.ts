@@ -250,7 +250,7 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
       context.addEventListener("input", () => { profile.localContextTokens = Number(context.value); changed(); });
       alive.addEventListener("input", () => { profile.keepAliveMinutes = Number(alive.value); changed(); });
       reasoning.addEventListener("change", () => { profile.reasoning = reasoning.value; changed(); });
-      preset.addEventListener("click", () => { Object.assign(profile, LOCAL_BALANCED); changed(); draw(); notice("8 GB preset staged: 4096 context, 2048 output, adaptive reasoning, 5 minute keep-alive. Save changes to apply. For daily use choose a 3B/4B model; 20B/30B models can still offload to CPU."); });
+      preset.addEventListener("click", () => { Object.assign(profile, LOCAL_BALANCED); changed(); draw(); notice("8 GB preset staged: 4096 context, 4096 output, adaptive reasoning, 5 minute keep-alive. Save changes to apply. For daily use choose a 3B/4B model; 20B/30B models can still offload to CPU."); });
       inspect.addEventListener("click", async () => {
         const currentEpoch = epoch; inspect.disabled = true; result.textContent = "Reading model specifications…";
         try {
