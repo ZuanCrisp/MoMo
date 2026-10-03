@@ -227,6 +227,10 @@ pub async fn start(state: &LocalAI, directory: &str) -> Result<Status, String> {
         .env("OLLAMA_MODELS", &directory)
         .env("OLLAMA_NO_CLOUD", "1")
         .env("OLLAMA_CONTEXT_LENGTH", "4096")
+        .env("OLLAMA_MAX_LOADED_MODELS", "1")
+        .env("OLLAMA_NUM_PARALLEL", "1")
+        .env("OLLAMA_FLASH_ATTENTION", "1")
+        .env("OLLAMA_KV_CACHE_TYPE", "q8_0")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

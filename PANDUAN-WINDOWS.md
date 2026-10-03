@@ -36,8 +36,8 @@ npm.cmd run pack
 Hasil build:
 
 ```text
-windows/release/0.3.0/
-  MoMo-0.3.0-Windows-x64-Setup.exe
+windows/release/0.4.0/
+  MoMo-0.4.0-Windows-x64-Setup.exe
   README.md
 ```
 
@@ -52,7 +52,7 @@ Alternatif: buka **Actions → Windows → Run workflow** di GitHub, lalu unduh 
 Dari folder installer:
 
 ```powershell
-.\MoMo-0.3.0-Windows-x64-Setup.exe /S
+.\MoMo-0.4.0-Windows-x64-Setup.exe /S
 ```
 
 ## Menghapus aplikasi

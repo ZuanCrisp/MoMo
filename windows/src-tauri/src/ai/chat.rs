@@ -32,6 +32,7 @@ pub struct Chat {
     generation: AtomicU64,
     resets: AtomicU64,
     cancelled: Notify,
+    archive: Mutex<super::history::History>,
 }
 
 impl Chat {
@@ -44,9 +45,46 @@ impl Chat {
     pub fn reset(&self) {
         let mut history = self.messages.lock().unwrap();
         history.clear();
+        self.archive.lock().unwrap().active = None;
         self.resets.fetch_add(1, Ordering::SeqCst);
         self.generation.fetch_add(1, Ordering::SeqCst);
         self.cancelled.notify_waiters();
+    }
+    pub fn list(&self) -> Result<Vec<super::history::Summary>, String> {
+        self.archive.lock().unwrap().list()
+    }
+    pub fn open(&self, id: &str) -> Result<super::history::Conversation, String> {
+        let mut messages = self.messages.lock().unwrap();
+        let conversation = self.archive.lock().unwrap().open(id)?;
+        *messages = conversation
+            .messages
+            .iter()
+            .map(|m| Message {
+                role: if m.role == "user" {
+                    "user"
+                } else {
+                    "assistant"
+                },
+                parts: vec![Part::Text(m.content.clone())],
+            })
+            .collect();
+        self.resets.fetch_add(1, Ordering::SeqCst);
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        self.cancelled.notify_waiters();
+        Ok(conversation)
+    }
+    pub fn delete(&self, id: &str) -> Result<(), String> {
+        let mut messages = self.messages.lock().unwrap();
+        let mut archive = self.archive.lock().unwrap();
+        let active = archive.active.as_deref() == Some(id);
+        archive.delete(id)?;
+        if active {
+            messages.clear();
+            self.resets.fetch_add(1, Ordering::SeqCst);
+            self.generation.fetch_add(1, Ordering::SeqCst);
+            self.cancelled.notify_waiters();
+        }
+        Ok(())
     }
 }
 
@@ -64,7 +102,7 @@ pub enum ChatContext {
     },
 }
 
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatReply {
     pub text: String,
@@ -74,6 +112,13 @@ pub struct ChatReply {
     pub used_fallback: bool,
     pub key_label: Option<String>,
     pub actions: Vec<crate::desktop::Action>,
+    #[serde(default = "saved_default")]
+    pub history_saved: bool,
+    #[serde(default)]
+    pub conversation_id: Option<String>,
+}
+fn saved_default() -> bool {
+    true
 }
 
 #[cfg(test)]
@@ -203,6 +248,9 @@ where
         role: "assistant",
         parts: vec![Part::Text(reply.text.clone())],
     });
+    let mut archive = chat.archive.lock().unwrap();
+    reply.history_saved = archive.record(query, &reply).is_ok();
+    reply.conversation_id = archive.active.clone();
     Ok(reply)
 }
 
@@ -256,11 +304,15 @@ where
                 used_fallback: profile_index > 0 || fallback_key,
                 key_label: label.clone(),
                 actions: vec![],
+                history_saved: true,
+                conversation_id: None,
             });
-            let result = if computer_control {
-                desktop_tools::complete(profile, key.as_deref(), messages, journal, execute).await
-            } else {
-                providers::complete(profile, key.as_deref(), messages).await
+            let result = match super::tuning::wire_profile(profile, key.as_deref()).await {
+                Ok(wire) if computer_control => {
+                    desktop_tools::complete(&wire, key.as_deref(), messages, journal, execute).await
+                }
+                Ok(wire) => providers::complete(&wire, key.as_deref(), messages).await,
+                Err(error) => Err(error),
             };
             match result {
                 Ok(text) => {
@@ -272,6 +324,8 @@ where
                         used_fallback: profile_index > 0 || fallback_key,
                         key_label: label,
                         actions: journal.actions(),
+                        history_saved: true,
+                        conversation_id: None,
                     })
                 }
                 Err(error) => {
@@ -781,6 +835,76 @@ mod tests {
             .unwrap_err();
         assert!(error.contains("declined"));
         assert!(chat.messages.lock().unwrap().is_empty());
+        thread.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn adaptive_ollama_inspects_capabilities_and_bounds_request_context() {
+        use serde_json::json;
+        let (url, rx, thread) = server(vec![
+            (200, json!({"thinking":{"values":[false,true]},"model_info":{"test.context_length":2048}}).to_string()),
+            (200, json!({"models":[]}).to_string()),
+            (200, json!({"message":{"content":"Hello"}}).to_string()),
+            (200, json!({"message":{"content":"Analysis complete"}}).to_string()),
+        ]);
+        let mut c = config(url);
+        let p = &mut c.profiles[0];
+        p.provider = Provider::Ollama;
+        p.keys.clear();
+        p.reasoning = "adaptive".into();
+        let chat = Chat::default();
+        let reply = send(&chat, &c, "hello".into(), None, key).await.unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        let request = rx.recv().unwrap();
+        assert!(request.contains("\"think\":false"));
+        assert!(request.contains("\"num_ctx\":2048"));
+        assert!(request.contains("\"keep_alive\":300"));
+        let id = reply.conversation_id.unwrap();
+        chat.reset();
+        chat.open(&id).unwrap();
+        send(&chat, &c, "analisis algoritma".into(), None, key)
+            .await
+            .unwrap();
+        let request = rx.recv().unwrap();
+        assert!(request.contains("\"think\":true"));
+        assert!(request.contains("Hello"));
+        assert_eq!(chat.list().unwrap()[0].message_count, 4);
+        thread.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn adaptive_local_responses_selects_supported_reasoning_and_preserves_tools() {
+        use serde_json::json;
+        let (url, rx, thread) = server(vec![
+            (200, json!({"models":[{"key":"model-one","capabilities":{"reasoning":{"allowed_options":["low","medium","high"]}}}]}).to_string()),
+            (200, json!({"output":[{"type":"function_call","call_id":"local-call","name":"open_app","arguments":"{\"app\":\"notepad\"}"}]}).to_string()),
+            (200, json!({"output":[{"type":"message","content":[{"type":"output_text","text":"Opened"}]}]}).to_string()),
+        ]);
+        let mut c = config(url);
+        let p = &mut c.profiles[0];
+        p.provider = Provider::LocalOpenai;
+        p.keys.clear();
+        p.reasoning = "adaptive".into();
+        let chat = Chat::default();
+        let reply = send_controlled(&chat, &c, "open notepad".into(), None, key, true, |_, _| {
+            crate::desktop::Action {
+                name: "open_app".into(),
+                detail: "Opened".into(),
+                success: true,
+                path: None,
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(reply.actions.len(), 1);
+        assert!(rx.recv().unwrap().contains("/api/v1/models"));
+        let first = rx.recv().unwrap();
+        assert!(first.contains("/v1/responses"));
+        assert!(first.contains("\"effort\":\"low\""));
+        let second = rx.recv().unwrap();
+        assert!(second.contains("local-call"));
+        assert!(second.contains("function_call_output"));
         thread.join().unwrap();
     }
 

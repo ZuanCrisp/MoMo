@@ -131,7 +131,40 @@ fn text(message: &Message) -> String {
         .join("\n")
 }
 
+fn local_context<'a>(profile: &Profile, messages: &'a [Message]) -> &'a [Message] {
+    // Conservative byte estimate, not a tokenizer. Keep complete recent turns
+    // and the current question; full conversation text remains in the archive.
+    let budget = profile.local_context_tokens.saturating_sub(
+        profile
+            .max_output_tokens
+            .min(profile.local_context_tokens / 2),
+    ) as usize
+        * 2;
+    let weight = |m: &Message| {
+        m.parts
+            .iter()
+            .map(|p| match p {
+                Part::Text(t) => t.len(),
+                Part::File { .. } => 2048,
+            })
+            .sum::<usize>()
+            + 32
+    };
+    let mut start = 0;
+    let mut total: usize = messages.iter().map(weight).sum();
+    while start + 2 < messages.len() && total > budget {
+        total = total.saturating_sub(weight(&messages[start]) + weight(&messages[start + 1]));
+        start += 2;
+    }
+    &messages[start..]
+}
+
 pub fn body(profile: &Profile, messages: &[Message]) -> Result<Value, Failure> {
+    let messages = if profile.provider.is_local() {
+        local_context(profile, messages)
+    } else {
+        messages
+    };
     if !matches!(
         profile.provider,
         Provider::Anthropic | Provider::Gemini | Provider::Openai
@@ -172,7 +205,7 @@ pub fn body(profile: &Profile, messages: &[Message]) -> Result<Value, Failure> {
                 .collect();
             json!({"contents":contents,"systemInstruction":{"parts":[{"text":SYSTEM}]},"generationConfig":{"maxOutputTokens":profile.max_output_tokens}})
         }
-        Provider::Openai => {
+        Provider::Openai | Provider::LocalResponses => {
             let input: Vec<_> = messages.iter().map(|m| {
                 if m.role == "assistant" { return json!({"role":"assistant","content":text(m)}); }
                 let content: Vec<_> = m.parts.iter().map(|part| match part {
@@ -201,7 +234,7 @@ pub fn body(profile: &Profile, messages: &[Message]) -> Result<Value, Failure> {
         }
         Provider::Ollama => {
             let mut converted = vec![json!({"role":"system","content":SYSTEM})];
-            for m in messages {
+            for m in local_context(profile, messages) {
                 let mut item = json!({"role":m.role,"content":text(m)});
                 let images: Vec<_> = m
                     .parts
@@ -224,7 +257,7 @@ pub fn body(profile: &Profile, messages: &[Message]) -> Result<Value, Failure> {
             Provider::Anthropic => {
                 json!([{"type":"web_search_20250305","name":"web_search","max_uses":5}])
             }
-            Provider::Openai => json!([{"type":"web_search"}]),
+            Provider::Openai | Provider::LocalResponses => json!([{"type":"web_search"}]),
             Provider::Gemini => json!([{"googleSearch":{}}]),
             _ => {
                 return Err(Failure::new(
@@ -257,13 +290,15 @@ pub fn parse_reply(provider: Provider, response: &Value) -> Result<String, Failu
                     })
                 })
         }
-        Provider::Openai => response["output"].as_array().is_some_and(|items| {
-            items.iter().any(|item| {
-                item["content"]
-                    .as_array()
-                    .is_some_and(|parts| parts.iter().any(|part| part["type"] == "refusal"))
+        Provider::Openai | Provider::LocalResponses => {
+            response["output"].as_array().is_some_and(|items| {
+                items.iter().any(|item| {
+                    item["content"]
+                        .as_array()
+                        .is_some_and(|parts| parts.iter().any(|part| part["type"] == "refusal"))
+                })
             })
-        }),
+        }
         _ => {
             response["choices"][0]["message"]["refusal"]
                 .as_str()
@@ -292,7 +327,7 @@ pub fn parse_reply(provider: Provider, response: &Value) -> Result<String, Failu
             .filter(|b| b["thought"] != true)
             .filter_map(|b| b["text"].as_str())
             .collect(),
-        Provider::Openai => response["output"]
+        Provider::Openai | Provider::LocalResponses => response["output"]
             .as_array()
             .into_iter()
             .flatten()
@@ -312,6 +347,13 @@ pub fn parse_reply(provider: Provider, response: &Value) -> Result<String, Failu
     };
     let text = parts.join("\n").trim().to_string();
     if text.is_empty() {
+        if provider == Provider::Ollama
+            && response["message"]["thinking"]
+                .as_str()
+                .is_some_and(|s| !s.is_empty())
+        {
+            return Err(Failure::new("The model finished reasoning without a final answer. Increase the output token limit or choose a lighter reasoning mode in Local performance & reasoning.", Retry::Stop));
+        }
         if response["status"] == "incomplete"
             || response["candidates"][0]["finishReason"] == "MAX_TOKENS"
         {
@@ -336,9 +378,11 @@ pub async fn complete(
 }
 
 pub async fn request(profile: &Profile, key: Option<&str>, body: &Value) -> Result<Value, Failure> {
+    let mut body = body.clone();
+    super::tuning::prepare(profile, key, &mut body).await?;
     let suffix = match profile.provider {
         Provider::Anthropic => "messages".into(),
-        Provider::Openai => "responses".into(),
+        Provider::Openai | Provider::LocalResponses => "responses".into(),
         Provider::Gemini => format!("models/{}:generateContent", profile.model),
         Provider::Ollama => "api/chat".into(),
         _ => "chat/completions".into(),
@@ -469,6 +513,28 @@ mod tests {
         profile.provider = Provider::Openai;
         let request = body(&profile, &messages).unwrap();
         assert_eq!(request["store"], false);
+    }
+
+    #[test]
+    fn local_context_keeps_complete_recent_turns_and_preserves_the_full_archive() {
+        let mut profile = Config::default().profiles.remove(0);
+        profile.local_context_tokens = 1024;
+        let messages = vec![
+            Message {
+                role: "user",
+                parts: vec![Part::Text("old".repeat(1200))],
+            },
+            Message {
+                role: "assistant",
+                parts: vec![Part::Text("old reply".into())],
+            },
+            Message {
+                role: "user",
+                parts: vec![Part::Text("latest question".into())],
+            },
+        ];
+        assert_eq!(local_context(&profile, &messages).len(), 1);
+        assert_eq!(messages.len(), 3);
     }
 
     #[test]

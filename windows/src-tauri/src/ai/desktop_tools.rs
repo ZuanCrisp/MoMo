@@ -60,7 +60,7 @@ where
     let definitions = crate::desktop::definitions();
     let tools: Vec<_> = definitions.into_iter().map(|definition| match profile.provider {
         Provider::Anthropic => json!({"name":definition["name"],"description":definition["description"],"input_schema":definition["parameters"]}),
-        Provider::Openai => { let mut tool = definition; tool["type"] = json!("function"); tool["strict"] = json!(true); tool },
+        Provider::Openai | Provider::LocalResponses => { let mut tool = definition; tool["type"] = json!("function"); tool["strict"] = json!(true); tool },
             Provider::Gemini => {
                 let mut definition = definition;
                 // Gemini's OpenAPI Schema supports a subset of JSON Schema.
@@ -92,7 +92,7 @@ where
             .as_array_mut()
             .unwrap()
             .push(json!({"text":instruction})),
-        Provider::Openai => {
+        Provider::Openai | Provider::LocalResponses => {
             body["instructions"] = json!(format!(
                 "{}\n{instruction}",
                 body["instructions"].as_str().unwrap_or("")
@@ -149,7 +149,7 @@ fn calls(provider: Provider, response: &Value) -> Result<Vec<Call>, Failure> {
             .flatten()
             .filter(|part| part["type"] == "tool_use")
             .collect(),
-        Provider::Openai => response["output"]
+        Provider::Openai | Provider::LocalResponses => response["output"]
             .as_array()
             .into_iter()
             .flatten()
@@ -179,7 +179,9 @@ fn calls(provider: Provider, response: &Value) -> Result<Vec<Call>, Failure> {
             let (name, args, id) = match provider {
                 Provider::Anthropic => (&raw["name"], &raw["input"], &raw["id"]),
                 Provider::Gemini => (&raw["name"], &raw["args"], &raw["id"]),
-                Provider::Openai => (&raw["name"], &raw["arguments"], &raw["call_id"]),
+                Provider::Openai | Provider::LocalResponses => {
+                    (&raw["name"], &raw["arguments"], &raw["call_id"])
+                }
                 _ => (
                     &raw["function"]["name"],
                     &raw["function"]["arguments"],
@@ -230,7 +232,7 @@ fn append_results(
             contents.push(response["candidates"][0]["content"].clone());
             contents.push(json!({"role":"user","parts":calls.iter().zip(results).map(|(call,result)| { let mut part = json!({"functionResponse":{"name":call.name,"response":result}}); if !call.id.starts_with("action-") { part["functionResponse"]["id"] = json!(call.id); } part }).collect::<Vec<_>>()}));
         }
-        Provider::Openai => {
+        Provider::Openai | Provider::LocalResponses => {
             let input = body["input"].as_array_mut().unwrap();
             input.extend(response["output"].as_array().into_iter().flatten().cloned());
             input.extend(calls.iter().zip(results).map(|(call,result)| json!({"type":"function_call_output","call_id":call.id,"output":result.to_string()})));

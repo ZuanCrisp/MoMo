@@ -344,3 +344,8 @@ button:focus-visible, summary:focus-visible { outline: 2px solid #91b8ff; outlin
   .ai-fallback-item { flex-wrap: wrap; }
   .ai-save-bar { flex-wrap: wrap; }
 }
+.ai-performance { padding: 14px; margin-top: 16px; border-radius: 12px; border: 1px solid rgba(129,140,248,.16); background: rgba(129,140,248,.04); }
+.ai-performance h3 { margin-top: 0; }
+.ai-performance .row { flex-wrap: wrap; }
+.integration-help summary { color: #acb9d5; font-size: 12px; cursor: pointer; }
+.integration-help p { margin: 7px 0 10px; }

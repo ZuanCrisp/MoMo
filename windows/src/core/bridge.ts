@@ -5,8 +5,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import type { Settings } from "./state";
-import type { AIConfig, AIProfile, AIKeyStatus, AIKeyUpdate, AIModel, AIReply } from "./ai";
+import type { Settings, ChatMessage } from "./state";
+import type { AIConfig, AIProfile, AIKeyStatus, AIKeyUpdate, AIModel, AIReply, ModelDetails } from "./ai";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -87,6 +87,10 @@ export const Bridge = {
     callOrThrow<AIReply>("chat_send", { query, context }),
   chatCancel: () => callOrThrow<void>("chat_cancel"),
   chatReset: () => call<void>("chat_reset"),
+  chatHistory: () => callOrThrow<ConversationSummary[]>("chat_history"),
+  chatOpen: (id: string) => callOrThrow<Conversation>("chat_open", { id }),
+  chatDelete: (id: string) => callOrThrow<void>("chat_delete", { id }),
+  aiModelDetails: (profile: AIProfile) => callOrThrow<ModelDetails>("ai_model_details", { profile }),
   aiKeyStatus: () => callOrThrow<AIKeyStatus[]>("ai_key_status"),
   aiSaveConfig: (config: AIConfig, updates: AIKeyUpdate[]) =>
     callOrThrow<Settings>("ai_save_config", { config, updates }),
@@ -110,6 +114,9 @@ export const Bridge = {
   /** Tray → Pause. Stops the integration pollers, not just the island. */
   setPaused: (paused: boolean) => call<void>("set_paused", { paused }),
 };
+
+export interface ConversationSummary { id: string; title: string; updatedAt: number; messageCount: number }
+export interface Conversation extends ConversationSummary { messages: ChatMessage[] }
 
 export interface IntegrationUpdate {
   id: string;

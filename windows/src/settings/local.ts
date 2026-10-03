@@ -26,7 +26,7 @@ export function createLocalSection(onUse: (model: string, baseUrl: string) => vo
     clear(select);
     if (!next.models.length) select.append(h("option", { value: "", text: "No complete chat models found" }));
     for (const model of next.models) select.append(h("option", { value: model, text: model }));
-    select.value = next.models.includes(previous) ? previous : next.models.find(m => m === "llama3.2:3b") || next.models[0] || "";
+    select.value = next.models.includes(previous) ? previous : next.models.find(m => m === "qwen3.5:4b") || next.models.find(m => m === "llama3.2:3b") || next.models[0] || "";
     feedback.className = `notice ${next.running ? "ok" : "warn"}`;
     feedback.textContent = next.running ? `Local AI is running · ${next.models.length} models · ${next.baseUrl}`
       : !next.runtimeInstalled ? "Install Ollama first, then click Start local AI. Your downloaded models stay in this folder."

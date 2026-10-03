@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — Windows / Linux
+
+- Compact model selector aligned to the left, without duplicated profile/model names; chat history and New chat controls in the toolbar.
+- Private local conversation archives with search, reopen, continuation and deletion. Reopening restores text context and action receipts without replaying actions. Completed turns survive app restarts; attachments are not copied into the archive.
+- Ollama model inspection reports weight size, quantization, capabilities, context ceiling and supported reasoning controls. Adaptive reasoning chooses lighter settings for short messages and more reasoning for analysis, code and maths; unknown families retain model defaults.
+- Balanced 8 GB VRAM preset: 4096 context tokens, 2048 output tokens, adaptive reasoning, 5-minute keep-alive. Qwen3.5 4B is selected when available in the local setup panel.
+- MoMo's local runtime uses one loaded model and one parallel request, Flash Attention and q8_0 KV cache. A conservative context estimate retains recent complete turns while older text stays in the archive.
+- Settings explains what each integration reads, which separate credential it needs and how to enable its status pill.
+- Adaptive is the default for new local profiles and migrated local preferences. LM Studio models exposing supported effort levels use local Responses API with preserved function calls; unknown local APIs retain model defaults.
+
+Native macOS source is unchanged by this update.
+
 ## 0.3.0 — Windows / Linux
 
 - Smooth themed dropdowns with keyboard navigation, selection markers and menus that fit the chat card.

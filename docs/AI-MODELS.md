@@ -1,6 +1,6 @@
 # AI dan model di MoMo
 
-Fitur ini tersedia pada MoMo **0.3.0 untuk Windows/Linux**. Versi macOS belum memakai panel ini.
+Fitur ini tersedia pada MoMo **0.4.0 untuk Windows/Linux**. Versi macOS belum memakai panel ini.
 
 ## Memilih AI online
 
@@ -79,3 +79,40 @@ npm.cmd run test:ui
 cargo fmt --all -- --check
 cargo test --workspace --release --locked
 ```
+
+## Optimasi GPU 8 GB dan adaptive reasoning
+
+Untuk RTX 5060 8 GB dengan RAM sekitar 16 GB, gunakan model 3B/4B sebagai titik awal. Library lokal ini memiliki Qwen3.5 4B Q4_K_M sekitar 3,16 GiB: ada ruang lebih untuk konteks dan aplikasi lain dibanding model 9B/20B/30B. Ukuran weight bukan total kebutuhan VRAM; konteks, image encoder dan aplikasi lain juga memakai memori. Model 20B/30B dapat berjalan dengan offload CPU/RAM, tetapi respons lebih lambat dan RAM 16 GB dapat menjadi batas.
+
+1. Pilih model pada **Local AI · offline → Add model profile**.
+2. Pada profil Ollama, klik **Inspect model** untuk membaca ukuran, kuantisasi, batas konteks dan kemampuan dari server.
+3. Klik **Balanced · 8 GB VRAM → Save changes**: konteks 4096, output 2048, timeout 300 detik dan keep-alive 5 menit. Sampling mengikuti default model.
+4. **Adaptive · automatic** memilih thinking off/on untuk model yang mendukungnya, atau low/medium untuk model seperti GPT-OSS. Pesan pendek memakai usaha lebih rendah; analisis, debugging, matematika dan pesan panjang memakai usaha lebih tinggi. Ini kebijakan pemilihan MoMo, sehingga model yang tidak mendukung pengaturan reasoning tetap memakai defaultnya. Nilai dari metadata Ollama diprioritaskan; runtime lama memakai kontrol family yang dikenal untuk Qwen3/Qwen3.5 dan GPT-OSS.
+
+Server yang dimiliki MoMo membatasi satu model/satu permintaan paralel, mengaktifkan Flash Attention serta cache KV q8_0 untuk mengurangi pemakaian memori. Ini hanya mengatur server MoMo pada port 11435. [Dokumentasi memori Ollama](https://docs.ollama.com/faq) dan [kontrol thinking](https://docs.ollama.com/capabilities/thinking).
+
+History lengkap tetap tersimpan. Permintaan lokal memakai estimasi ukuran konteks untuk mempertahankan giliran terbaru; estimasi ini bukan tokenizer dan runtime tetap menerapkan batas konteksnya. Jika reasoning menghabiskan output tanpa jawaban, naikkan **Output token limit**, kurangi reasoning, atau gunakan model yang lebih ringan. First load memerlukan waktu lebih lama daripada respons sesudah model berada di memori.
+
+## History chat
+
+Adaptive menjadi default untuk semua profil lokal baru, termasuk Ollama dan server kompatibel OpenAI lokal. Profil versi lama tanpa pengaturan reasoning dimigrasikan ke Adaptive. Anda tetap dapat memilih Model default atau nilai manual yang didukung. Untuk LM Studio yang melaporkan level low/medium/high pada API model, MoMo memakai Responses API dan mempertahankan tool calling serta konteks percakapan. Server lama, kontrol yang belum didukung adapter, atau model tanpa thinking memakai default server. Konteks dan auto-unload LM Studio diatur saat memuat model di LM Studio. Lihat [metadata model LM Studio](https://lmstudio.ai/docs/developer/rest/list) dan [reasoning pada Responses](https://lmstudio.ai/docs/developer/openai-compat/responses).
+
+Klik **History** di chat untuk mencari dan membuka percakapan, atau **+ / New chat** untuk memulai percakapan baru. Model di kiri bisa diganti sambil melanjutkan konteks teks. Klik tombol hapus dua kali untuk menghapus satu percakapan.
+
+Giliran yang selesai disimpan lokal di **%LOCALAPPDATA%\MoMo\chat-history.json** pada Windows, atau direktori data MoMo pada Linux. Penyimpanan dibatasi 100 percakapan, 200 pesan per percakapan dan 8 MiB; yang paling lama dibersihkan saat penuh. Teks sangat panjang dipersingkat dalam arsip. File/gambar/PDF tidak disimpan ulang di history: lampirkan kembali pada chat baru bila diperlukan. Riwayat tindakan hanya dibaca sebagai bukti hasil; membukanya tidak menjalankan tindakan kembali. History berisi teks percakapan dan disimpan terpisah dari vault API key, Git serta installer.
+
+## Memahami integrasi
+
+Alurnya: **token layanan → API layanan → status di pill MoMo**. MoMo membaca data secara berkala. Tombol pada kartu dapat membuka dashboard layanan. API key Gemini/OpenAI/Claude hanya untuk chat, sedangkan integrasi memakai token layanan masing-masing. Computer actions diatur terpisah.
+
+| Layanan | Data yang ditampilkan | Interval |
+| --- | --- | --- |
+| GitHub | Jumlah repository dan star akun yang dapat diakses token | 5 menit |
+| Vercel | Deployment terbaru dan statusnya | 30 detik |
+| n8n | Status eksekusi workflow pada instance Anda | 15 detik |
+| Resend | Aktivitas email yang tersedia untuk API key | 1 menit |
+| Stripe | Saldo dan pembayaran terbaru | 30 detik |
+| Notion | Halaman yang dibagikan kepada integration | 5 menit |
+| Cal.com | Booking mendatang | 5 menit |
+
+Contoh GitHub: buat personal access token di akun GitHub Anda dengan akses baca yang sesuai → buka **Settings → Integrations → GitHub** → isi **Token**, klik **Save** → aktifkan pill GitHub. MoMo mulai membaca API dan menampilkan jumlah repo/star. Token tidak membuat MoMo melakukan commit atau push. Untuk Notion, bagikan halaman ke integration; untuk n8n, isi URL instance dan API key. Aktifkan maksimal empat pill. Matikan toggle untuk menghentikan polling layanan tersebut; **Pause** di tray menghentikan semua poller integrasi. **How [service] works** di Settings menjelaskan setiap layanan.

@@ -2,7 +2,7 @@
 
 MoMo is a desktop companion that displays coding sessions, permission requests, chats, file drops and service integrations at the top of your screen.
 
-This repository is a rebrand of [Coucou](https://github.com/Louis-CFM/coucou), based on its 0.1.2 source archive. The Windows/Linux package version is 0.3.0. See [PROVENANCE.md](PROVENANCE.md) for the origin and changes.
+This repository is a rebrand of [Coucou](https://github.com/Louis-CFM/coucou), based on its 0.1.2 source archive. The Windows/Linux package version is 0.4.0. See [PROVENANCE.md](PROVENANCE.md) for the origin and changes.
 
 Windows/Linux chat supports Claude, OpenAI / ChatGPT, Gemini, other OpenAI-compatible APIs and local models through Ollama or a local OpenAI-compatible server. Each model profile has its own ordered API keys and optional model fallbacks. See [the AI setup guide](docs/AI-MODELS.md) and [CHANGELOG.md](CHANGELOG.md).
 
@@ -82,3 +82,5 @@ Local credentials, toolchains, archives, installed apps and build outputs are ig
 ## License and credits
 
 The source code retains Louis Raillé's [MIT license](LICENSE). Original character artwork, icons, sounds and media have separate terms in [LICENSE-ASSETS.md](LICENSE-ASSETS.md), including restrictions on distribution of derivatives using those assets. Renaming the app does not change those terms.
+
+Windows/Linux 0.4 adds saved chat history, a compact left-aligned model selector and model-aware Ollama performance/reasoning controls. The 8 GB preset is a starting point for 3B/4B models; inspect weight sizes and capabilities before selecting larger models. Integration setup help is available in Settings and the [AI guide](docs/AI-MODELS.md).

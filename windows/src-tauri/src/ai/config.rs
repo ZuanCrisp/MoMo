@@ -14,11 +14,16 @@ pub enum Provider {
     OpenaiCompatible,
     Ollama,
     LocalOpenai,
+    #[serde(skip)]
+    LocalResponses,
 }
 
 impl Provider {
     pub fn is_local(self) -> bool {
-        matches!(self, Self::Ollama | Self::LocalOpenai)
+        matches!(
+            self,
+            Self::Ollama | Self::LocalOpenai | Self::LocalResponses
+        )
     }
 
     pub fn default_url(self) -> &'static str {
@@ -27,7 +32,7 @@ impl Provider {
             Self::Openai => "https://api.openai.com/v1",
             Self::Gemini => "https://generativelanguage.googleapis.com/v1beta",
             Self::Ollama => "http://127.0.0.1:11434",
-            Self::LocalOpenai => "http://127.0.0.1:1234/v1",
+            Self::LocalOpenai | Self::LocalResponses => "http://127.0.0.1:1234/v1",
             Self::OpenaiCompatible => "",
         }
     }
@@ -59,6 +64,21 @@ pub struct Profile {
     pub timeout_seconds: u64,
     #[serde(default)]
     pub web_search: bool,
+    #[serde(default = "default_context")]
+    pub local_context_tokens: u32,
+    #[serde(default = "default_reasoning")]
+    pub reasoning: String,
+    #[serde(default = "default_keep_alive")]
+    pub keep_alive_minutes: u64,
+}
+fn default_context() -> u32 {
+    4096
+}
+fn default_reasoning() -> String {
+    "default".into()
+}
+fn default_keep_alive() -> u64 {
+    5
 }
 
 fn default_tokens() -> u32 {
@@ -160,6 +180,16 @@ impl Profile {
                 "Web search is available only for Claude, OpenAI and Gemini profiles.".into(),
             );
         }
+        if !(1024..=131072).contains(&self.local_context_tokens)
+            || self.keep_alive_minutes > 30
+            || !["default", "adaptive", "off", "on", "low", "medium", "high"]
+                .contains(&self.reasoning.as_str())
+        {
+            return Err("Context must be 1024–131072 tokens, keep-alive 0–30 minutes, and reasoning must be a supported mode.".into());
+        }
+        if !self.provider.is_local() && self.reasoning != "default" {
+            return Err("These reasoning controls apply to local models. Use Model default for this provider.".into());
+        }
         if self.keys.len() > 16 {
             return Err("A profile can store up to 16 API keys.".into());
         }
@@ -227,6 +257,9 @@ impl Config {
                 max_output_tokens: default_tokens(),
                 timeout_seconds: default_timeout(),
                 web_search: true,
+                local_context_tokens: default_context(),
+                reasoning: default_reasoning(),
+                keep_alive_minutes: default_keep_alive(),
             }],
             active_profile_id: "legacy-claude".into(),
             fallback_enabled: false,

@@ -382,6 +382,42 @@ fn chat_reset(chat: State<Chat>) {
     chat.reset();
 }
 
+#[tauri::command]
+fn chat_history(chat: State<Chat>) -> Result<Vec<ai::history::Summary>, String> {
+    chat.list()
+}
+#[tauri::command]
+fn chat_open(chat: State<Chat>, id: String) -> Result<ai::history::Conversation, String> {
+    chat.open(&id)
+}
+#[tauri::command]
+fn chat_delete(chat: State<Chat>, id: String) -> Result<(), String> {
+    chat.delete(&id)
+}
+#[tauri::command]
+async fn ai_model_details(
+    shared: State<'_, Shared>,
+    mut profile: ai::Profile,
+) -> Result<ai::tuning::ModelDetails, String> {
+    profile.validate()?;
+    let saved = shared.settings.lock().unwrap().ai.clone();
+    // Only a matching saved endpoint can read this profile's credentials.
+    let key = saved
+        .profiles
+        .iter()
+        .find(|p| {
+            p.id == profile.id && p.provider == profile.provider && p.base_url == profile.base_url
+        })
+        .and_then(|p| {
+            p.keys
+                .iter()
+                .find_map(|slot| secrets::read_ai(&p.account(slot)).ok().flatten())
+        });
+    ai::tuning::details(&profile, key.as_deref())
+        .await
+        .map_err(|e| e.message)
+}
+
 /// Copies a dropped file into the inbox and reports its name back.
 #[tauri::command]
 fn ingest_file(path: String) -> Result<DroppedFile, String> {
@@ -532,6 +568,10 @@ pub fn run() {
             local_ai_status,
             local_ai_start,
             chat_reset,
+            chat_history,
+            chat_open,
+            chat_delete,
+            ai_model_details,
             ai_key_status,
             ai_save_config,
             ai_set_active,

@@ -11,6 +11,9 @@ export interface AIProfile {
   maxOutputTokens: number;
   timeoutSeconds: number;
   webSearch: boolean;
+  localContextTokens: number;
+  reasoning: string;
+  keepAliveMinutes: number;
 }
 export interface AIConfig {
   profiles: AIProfile[];
@@ -29,7 +32,16 @@ export interface AIReply {
   usedFallback: boolean;
   keyLabel: string | null;
   actions?: { name: string; detail: string; success: boolean; path: string | null }[];
+  historySaved?: boolean;
+  conversationId?: string | null;
 }
+
+export interface ModelDetails {
+  sizeBytes: number; maxContextTokens: number; parameters: string; quantization: string;
+  capabilities: string[]; thinkingValues: (string | boolean)[]; legacyThinkingControls: boolean;
+}
+export const LOCAL_DEFAULTS = { localContextTokens: 4096, reasoning: "default", keepAliveMinutes: 5 };
+export const LOCAL_BALANCED = { localContextTokens: 4096, reasoning: "adaptive", keepAliveMinutes: 5, maxOutputTokens: 2048, timeoutSeconds: 300 };
 
 export const PROVIDERS: { id: AIProvider; label: string; url: string; hint: string; keyHint: string; local?: boolean; search?: boolean }[] = [
   { id: "anthropic", label: "Claude · Anthropic", url: "https://api.anthropic.com/v1", hint: "Use an Anthropic API key, then choose a Claude model.", keyHint: "Paste your Anthropic API key", search: true },
@@ -43,7 +55,7 @@ export const PROVIDERS: { id: AIProvider; label: string; url: string; hint: stri
 export function providerInfo(id: AIProvider) { return PROVIDERS.find(p => p.id === id)!; }
 export function defaultAIConfig(): AIConfig {
   return {
-    profiles: [{ id: "legacy-claude", name: "Claude", provider: "anthropic", baseUrl: PROVIDERS[0].url, model: "claude-opus-5", keys: [{ id: "legacy", label: "Main key" }], maxOutputTokens: 4096, timeoutSeconds: 120, webSearch: true }],
+    profiles: [{ id: "legacy-claude", name: "Claude", provider: "anthropic", baseUrl: PROVIDERS[0].url, model: "claude-opus-5", keys: [{ id: "legacy", label: "Main key" }], maxOutputTokens: 4096, timeoutSeconds: 120, webSearch: true, ...LOCAL_DEFAULTS }],
     activeProfileId: "legacy-claude", fallbackEnabled: false, fallbackProfileIds: [],
   };
 }

@@ -1,7 +1,9 @@
 mod chat;
 pub mod config;
 mod desktop_tools;
+pub mod history;
 mod providers;
+pub mod tuning;
 
 use std::collections::{HashMap, HashSet};
 

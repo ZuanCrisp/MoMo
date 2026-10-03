@@ -65,6 +65,15 @@ const INTEGRATIONS: IntegrationDef[] = [
 ];
 
 const MAX_ACTIVE = 4;
+const SERVICE_HELP: Record<string, string> = {
+  integration_github: "Shows repository and star counts for the token's account. Create a GitHub personal access token with access to the repositories you want to include, save it here, then enable this pill. Updates about every 5 minutes.",
+  integration_vercel: "Shows recent deployments and their status. Save a Vercel account token with access to your projects, then enable this pill. Updates about every 30 seconds.",
+  integration_n8n: "Shows workflow execution status. Enter your n8n instance URL and its API key, save both, then enable this pill. Updates about every 15 seconds.",
+  integration_resend: "Shows the email activity available to your Resend API key. Save a key that can read email records, then enable this pill. Updates about every minute.",
+  integration_stripe: "Shows account balance and recent payment charges. Save a Stripe key with read access to those resources, then enable this pill. Updates about every 30 seconds.",
+  integration_notion: "Shows pages shared with your Notion integration. Create a Notion integration, connect it to the pages you want to show, save its token, then enable this pill. Updates about every 5 minutes.",
+  integration_calcom: "Shows upcoming bookings in your Cal.com account. Save your Cal.com API key, then enable this pill. Updates about every 5 minutes.",
+};
 
 function integrationsSection(present: Record<string, boolean>): HTMLElement {
   const note = h("div", { class: "hint" });
@@ -72,7 +81,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
 
   function updateNote() {
     const used = settings.activeIntegrations.length;
-    note.textContent = `Pick up to ${MAX_ACTIVE} pills to show next to Mochi — ${used}/${MAX_ACTIVE} in use. Keys are stored in the Windows Credential Manager, never on disk.`;
+    note.textContent = `Show up to ${MAX_ACTIVE} service pills — ${used}/${MAX_ACTIVE} enabled. Credentials are stored in the OS credential vault. Enable a service after saving its own token; AI provider keys do not connect these services.`;
   }
 
   for (const def of INTEGRATIONS) {
@@ -92,6 +101,7 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
     });
 
     const rows = h("div", { style: "display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-width:0" });
+    rows.append(h("details", { class: "integration-help" }, h("summary", { text: `How ${def.name} works` }), h("p", { class: "hint", text: SERVICE_HELP[def.id] })));
     for (const field of def.fields) {
       const input = h("input", {
         type: field.secret ? "password" : "text",
@@ -135,7 +145,8 @@ function integrationsSection(present: Record<string, boolean>): HTMLElement {
   }
 
   updateNote();
-  return h("section", {}, h("h2", {}, h("span", { text: "Integrations" })), note, list);
+  return h("section", {}, h("h2", {}, h("span", { text: "Integrations" })),
+    h("p", { class: "hint", text: "Connect a service → MoMo reads its API periodically → its pill shows a status or activity card. Click the pill to see details or open its dashboard. Disable it to stop polling; tray Pause stops all integration pollers. Computer actions and AI chat are configured separately above." }), note, list);
 }
 
 // ── General section ───────────────────────────────────────────────────────────

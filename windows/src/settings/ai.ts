@@ -1,5 +1,5 @@
 import { Bridge } from "../core/bridge";
-import { PROVIDERS, providerInfo, type AIConfig, type AIProfile, type AIProvider, type AIModel, type AIKeyStatus } from "../core/ai";
+import { PROVIDERS, providerInfo, LOCAL_DEFAULTS, LOCAL_BALANCED, type AIConfig, type AIProfile, type AIProvider, type AIModel, type AIKeyStatus } from "../core/ai";
 import type { Settings } from "../core/state";
 import { h, clear } from "../views/dom";
 import { smoothSelect, syncSelect } from "../views/select";
@@ -108,7 +108,7 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
   function addProfile() {
     if (config.profiles.length >= 32) { notice("You can save up to 32 profiles.", "warn"); return; }
     const profile: AIProfile = { id: newId(), name: `AI profile ${config.profiles.length + 1}`, provider: "openai", baseUrl: providerInfo("openai").url,
-      model: "", keys: [{ id: newId(), label: "Main key" }], maxOutputTokens: 4096, timeoutSeconds: 120, webSearch: false };
+      model: "", keys: [{ id: newId(), label: "Main key" }], maxOutputTokens: 4096, timeoutSeconds: 120, webSearch: false, ...LOCAL_DEFAULTS };
     config.profiles.push(profile);
     if (!config.activeProfileId) config.activeProfileId = profile.id;
     selectedId = profile.id; tab = "profiles"; changed(); draw();
@@ -127,6 +127,7 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
       profile.provider = provider.value as AIProvider;
       const next = providerInfo(profile.provider);
       profile.baseUrl = next.url; profile.model = ""; profile.webSearch = false;
+      profile.reasoning = next.local ? "adaptive" : "default";
       profile.timeoutSeconds = next.local ? 300 : 120;
       profile.keys = next.local ? [] : [{ id: newId(), label: "Main key" }];
       models.delete(profile.id); changed(); draw();
@@ -226,6 +227,46 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
     editor.append(h("div", { class: "ai-key-heading" }, h("h3", { text: "API keys" }), addKey),
       h("p", { class: "hint", text: "Keys are tried top to bottom on connection, authentication or quota errors. Saved key values stay hidden and are stored securely on this device." }), keys, modelGroup);
 
+    if (info.local) {
+      const performance = h("div", { class: "ai-performance" });
+      const inspect = h("button", { type: "button", text: "Inspect model" });
+      const preset = h("button", { type: "button", text: "Balanced · 8 GB VRAM" });
+      const result = h("p", { class: "hint", "aria-live": "polite", text: "Inspect to see this model's size, context limit and supported reasoning. Model defaults preserve its sampling settings." });
+      const context = h("input", { type: "number", min: 1024, max: 131072, step: 1024, value: profile.localContextTokens ?? 4096, disabled: profile.provider !== "ollama" });
+      const alive = h("input", { type: "number", min: 0, max: 30, value: profile.keepAliveMinutes ?? 5, disabled: profile.provider !== "ollama" });
+      const reasoning = h("select", { "aria-label": "Local reasoning" });
+      function choices(values: (string | boolean)[] = []) {
+        clear(reasoning);
+        reasoning.append(h("option", { value: "default", text: "Model default" }), h("option", { value: "adaptive", text: "Adaptive · automatic" }));
+        for (const value of values) {
+          const id = typeof value === "boolean" ? value ? "on" : "off" : value;
+          if (!["on","off","low","medium","high"].includes(id)) continue;
+          reasoning.append(h("option", { value: id, text: typeof value === "boolean" ? value ? "Thinking on" : "Thinking off" : `Reasoning: ${value}` }));
+        }
+        if (![...reasoning.options].some(o => o.value === profile.reasoning)) reasoning.append(h("option", { value: profile.reasoning, text: `${profile.reasoning} · inspect to verify` }));
+        reasoning.value = profile.reasoning ?? "default"; syncSelect(reasoning);
+      }
+      choices();
+      context.addEventListener("input", () => { profile.localContextTokens = Number(context.value); changed(); });
+      alive.addEventListener("input", () => { profile.keepAliveMinutes = Number(alive.value); changed(); });
+      reasoning.addEventListener("change", () => { profile.reasoning = reasoning.value; changed(); });
+      preset.addEventListener("click", () => { Object.assign(profile, LOCAL_BALANCED); changed(); draw(); notice("8 GB preset staged: 4096 context, 2048 output, adaptive reasoning, 5 minute keep-alive. Save changes to apply. For daily use choose a 3B/4B model; 20B/30B models can still offload to CPU."); });
+      inspect.addEventListener("click", async () => {
+        const currentEpoch = epoch; inspect.disabled = true; result.textContent = "Reading model specifications…";
+        try {
+          const model = await Bridge.aiModelDetails(clone(profile)); if (currentEpoch !== epoch) return;
+          choices(model.thinkingValues); if (model.maxContextTokens) context.max = String(Math.min(131072, model.maxContextTokens));
+          const size = model.sizeBytes / 1024 ** 3;
+          const warning = size > 8 ? "CPU/RAM offload expected on an 8 GB GPU; choose a smaller model for faster replies." : size > 5.5 ? "Limited VRAM headroom on 8 GB. Keep context small, or choose a 3B/4B model." : "Good weight-size headroom for an 8 GB GPU; actual usage also includes context and other apps.";
+          result.textContent = `${model.parameters} · ${model.quantization}${size ? ` · ${size.toFixed(2)} GiB weights` : ""} · model context ceiling ${model.maxContextTokens || "unknown"} tokens. ${warning} Capabilities: ${model.capabilities.join(", ") || "unknown"}. ${model.thinkingValues.length ? model.legacyThinkingControls ? "Reasoning uses known family controls on this older runtime." : "Reasoning controls detected from the server." : "No selectable reasoning reported; adaptive keeps model defaults."}`;
+        } catch (error) { if (currentEpoch === epoch) result.textContent = message(error); }
+        finally { if (inspect.isConnected) inspect.disabled = false; }
+      });
+      performance.append(h("h3", { text: "Local performance & reasoning" }), h("div", { class: "row" }, inspect, preset), result,
+        h("div", { class: "ai-form-grid" }, field("Context tokens", context, "4096 is a practical starting point for 8 GB. Longer chats retain recent turns in the model's context."), field("Keep loaded (minutes)", alive, "0 releases memory after each reply; 5 avoids repeated model loading.")),
+        field("Reasoning", reasoning, "Adaptive applies to every local profile. Supported models use lighter/deeper controls; unknown or non-thinking models keep their defaults. LM Studio context and unload settings are managed in its server."));
+      editor.append(performance);
+    }
     const advanced = h("details", { class: "ai-advanced" }, h("summary", { text: "Advanced" }));
     const tokens = h("input", { type: "number", min: 16, max: 65536, value: profile.maxOutputTokens, step: 1 });
     const timeout = h("input", { type: "number", min: 10, max: 600, value: profile.timeoutSeconds, step: 1 });
@@ -338,7 +379,7 @@ export function createAISection(initial: AIConfig, onSaved: (settings: Settings)
       let profile = config.profiles.find(p => p.provider === "ollama" && p.baseUrl === baseUrl && p.model === model);
       if (!profile) {
         if (config.profiles.length >= 32) { notice("Delete an unused profile before adding another model.", "warn"); return; }
-        profile = { id: newId(), name: model, provider: "ollama", baseUrl, model, keys: [], maxOutputTokens: 2048, timeoutSeconds: 300, webSearch: false };
+        profile = { id: newId(), name: model, provider: "ollama", baseUrl, model, keys: [], ...LOCAL_BALANCED, webSearch: false };
         config.profiles.push(profile);
       }
       config.activeProfileId = profile.id;

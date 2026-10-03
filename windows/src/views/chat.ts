@@ -1,7 +1,7 @@
 import { h, svg, clear } from "./dom";
 import { ICONS } from "./icons";
 import { smoothSelect, syncSelect } from "./select";
-import { Bridge, type ChatContext } from "../core/bridge";
+import { Bridge, type ChatContext, type ConversationSummary } from "../core/bridge";
 import { providerInfo } from "../core/ai";
 import { Sound } from "../core/sound";
 import { State, type ChatMessage } from "../core/state";
@@ -22,7 +22,7 @@ function bubble(message: ChatMessage): HTMLElement {
 }
 
 function typingDots(): HTMLElement {
-  return h("div", { class: "chat-row" }, h("div", { class: "typing" }, h("i"), h("i"), h("i")));
+  return h("div", { class: "chat-row chat-working" }, h("div", { class: "typing" }, h("i"), h("i"), h("i")), h("span", { text: "Preparing your reply…", class: "chat-working-label" }));
 }
 
 function contextChip(label: string): HTMLElement {
@@ -37,17 +37,88 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
   const error = h("div", { class: "chat-error", role: "alert" });
   const profile = h("select", { class: "chat-model", "aria-label": "Chat AI model" });
   const manage = h("button", { class: "chat-manage", text: "Manage AI", onclick: () => void Bridge.openSettingsWindow() });
+  const history = h("button", { class: "chat-manage", text: "History", "aria-label": "Chat history", "aria-expanded": "false" });
+  const newChat = h("button", { class: "chat-new", title: "New chat", "aria-label": "New chat" }, svg(ICONS.plus, 12));
+  const archive = h("div", { class: "chat-archive", hidden: true });
+  const filter = h("input", { class: "history-search", placeholder: "Search conversations…", "aria-label": "Search chat history", type: "search" });
+  const conversations = h("div", { class: "history-list" });
+  archive.append(filter, conversations);
   const input = h("input", { type: "text", class: "chat-input", placeholder: "Ask me anything…", spellcheck: "false", maxlength: 32000, "aria-label": "Message" });
   const send = h("button", { class: "send-btn", title: "Send", "aria-label": "Send message" }, svg(ICONS.arrowUp, 11));
   const el = h("div", { class: "view" },
-    h("div", { class: "card wash chat-card" }, h("div", { class: "chat-body" },
-      h("div", { class: "chat-toolbar" }, smoothSelect(profile), manage), chipRow, log, error, h("div", { class: "chat-bar" }, input, send))));
+    h("div", { class: "card wash chat-card" },
+      h("div", { class: "chat-toolbar" }, smoothSelect(profile), h("div", { class: "chat-toolbar-actions" }, history, newChat, manage)),
+      h("div", { class: "chat-body" }, chipRow, archive, log, error, h("div", { class: "chat-bar" }, input, send))));
   (el.querySelector(".card") as HTMLElement).style.setProperty("--wash", "rgba(99,102,241,0.5)");
 
   let sending = false;
   let selecting = false;
   let renderedCount = -1;
   let profileSignature = "";
+  let renderedHistory: ChatMessage[] | null = null;
+  let showingHistory = false;
+  let historyBusy = false;
+  let saved: ConversationSummary[] = [];
+
+  function showHistory(show: boolean) {
+    showingHistory = show; archive.hidden = !show; log.hidden = show;
+    (el.querySelector(".chat-bar") as HTMLElement).hidden = show;
+    history.textContent = show ? "Back to chat" : "History";
+    history.setAttribute("aria-expanded", String(show));
+    State.notify(); onHeightChange();
+    if (show) filter.focus(); else input.focus();
+  }
+  function drawHistory() {
+    clear(conversations);
+    const items = saved.filter(c => c.title.toLowerCase().includes(filter.value.toLowerCase()));
+    if (!items.length) conversations.append(h("p", { class: "chat-empty-history", text: saved.length ? "No matching conversations." : "Your completed conversations will appear here." }));
+    for (const conversation of items) {
+      const open = h("button", { class: "history-open", type: "button", "aria-label": `Open chat: ${conversation.title}` },
+        h("span", { class: "history-title", text: conversation.title }), h("span", { class: "history-date", text: `${new Date(conversation.updatedAt * 1000).toLocaleDateString()} · ${conversation.messageCount / 2} replies` }));
+      const remove = h("button", { class: "history-delete", text: "×", title: "Delete conversation", "aria-label": `Delete chat: ${conversation.title}` });
+      let confirm = false;
+      open.addEventListener("click", async () => {
+        if (historyBusy || sending) return;
+        historyBusy = true; State.notify();
+        try {
+          const chat = await Bridge.chatOpen(conversation.id);
+          State.chatHistory = chat.messages; State.chatConversationId = chat.id; State.droppedFile = null;
+          nextId = Math.max(nextId, ...chat.messages.map(m => m.id + 1));
+          error.textContent = ""; showHistory(false);
+        } catch (err) { error.textContent = String(err).replace(/^Error:\s*/, ""); }
+        finally { historyBusy = false; State.notify(); }
+      });
+      remove.addEventListener("click", async () => {
+        if (historyBusy || sending) return;
+        if (!confirm) { confirm = true; remove.textContent = "Delete?"; remove.classList.add("confirm"); return; }
+        historyBusy = true;
+        try {
+          await Bridge.chatDelete(conversation.id); saved = saved.filter(c => c.id !== conversation.id);
+          if (State.chatConversationId === conversation.id) { State.chatHistory = []; State.chatConversationId = null; State.droppedFile = null; }
+          drawHistory();
+        } catch (err) { error.textContent = String(err).replace(/^Error:\s*/, ""); }
+        finally { historyBusy = false; State.notify(); }
+      });
+      conversations.append(h("div", { class: "history-item" }, open, remove));
+    }
+  }
+  filter.addEventListener("input", drawHistory);
+  history.addEventListener("click", async () => {
+    if (sending || historyBusy) return;
+    if (showingHistory) { showHistory(false); return; }
+    historyBusy = true; error.textContent = ""; State.notify();
+    try { saved = await Bridge.chatHistory(); drawHistory(); showHistory(true); }
+    catch (err) { error.textContent = String(err).replace(/^Error:\s*/, ""); }
+    finally { historyBusy = false; State.notify(); }
+  });
+  newChat.addEventListener("click", async () => {
+    if (sending || historyBusy) return;
+    historyBusy = true;
+    try {
+      await Bridge.chatReset(); State.chatHistory = []; State.chatConversationId = null; State.droppedFile = null;
+      error.textContent = ""; input.value = ""; showHistory(false);
+    } finally { historyBusy = false; State.notify(); }
+  });
 
   profile.addEventListener("change", async () => {
     selecting = true; profile.disabled = true; error.textContent = "";
@@ -78,6 +149,8 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
       // Closing/resetting chat must not resurrect the previous conversation.
       if (State.chatHistory.some(message => message.id === id)) {
         State.chatHistory.push({ id: nextId++, role: "assistant", content: text, route });
+        State.chatConversationId = route.conversationId ?? null;
+        if (route.historySaved === false) error.textContent = "Reply completed, but history could not be saved. Check available disk space and folder permissions.";
         Sound.play("finish");
       }
     } catch (err) {
@@ -108,7 +181,7 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
         profileSignature = signature; clear(profile);
         if (!ai.profiles.length) profile.append(h("option", { value: "", text: "Set up an AI model" }));
         for (const p of ai.profiles) profile.append(h("option", { value: p.id,
-          text: `${providerInfo(p.provider).local ? "Local · " : ""}${p.name} · ${p.model || "setup needed"}` }));
+          text: `${providerInfo(p.provider).local ? "Local · " : ""}${p.name === p.model ? p.model : `${p.name} · ${p.model || "setup needed"}`}` }));
       }
       profile.value = ai.activeProfileId;
       profile.disabled = sending || selecting || !ai.profiles.length;
@@ -122,14 +195,16 @@ export function buildPrompt(onHeightChange: () => void): ViewHost {
       }
       const thinking = State.stateOverride === "thinking";
       const count = State.chatHistory.length + (thinking ? 0.5 : 0);
-      if (count !== renderedCount) {
-        renderedCount = count; clear(log);
+      if (count !== renderedCount || renderedHistory !== State.chatHistory) {
+        renderedCount = count; renderedHistory = State.chatHistory; clear(log);
         for (const m of State.chatHistory) log.append(bubble(m));
         if (thinking) log.append(typingDots());
+        if (!count) log.append(h("div", { class: "chat-welcome" }, h("strong", { text: "What can I help you with?" }), h("span", { text: "Ask a question, open an app, or create a note." })));
         log.scrollTop = log.scrollHeight;
       }
       input.placeholder = !ready ? "Choose a model in Manage AI…" : State.chatHistory.length ? "Continue…" : "Ask me anything…";
       input.disabled = sending || !ready;
+      history.disabled = sending || historyBusy; newChat.disabled = sending || historyBusy;
       send.disabled = selecting || !ready;
       send.title = sending ? "Stop request" : "Send";
       send.setAttribute("aria-label", sending ? "Stop request" : "Send message");

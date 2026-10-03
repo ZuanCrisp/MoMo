@@ -10,7 +10,7 @@ async function choose(page: Page, label: string, option: string) {
 async function fixture(page: Page) {
   await page.addInitScript((initial) => {
     const w = window as any;
-    w.aiTest = { settings: initial, saves: [], failSave: false, chatError: false, pending: null, cancelled: 0 };
+    w.aiTest = { settings: initial, saves: [], failSave: false, chatError: false, pending: null, cancelled: 0, history: [], opened: [], deleted: [] };
     w.__TAURI_INTERNALS__ = {
       transformCallback: () => 1,
       invoke: async (cmd: string, args: any = {}) => {
@@ -32,6 +32,10 @@ async function fixture(page: Page) {
             if (t.chatError) throw "API rate limit or quota reached (HTTP 429).";
             return new Promise((resolve, reject) => { t.pending = { resolve, reject }; });
           case "chat_cancel": t.cancelled++; t.pending?.reject("Request cancelled."); return;
+          case "chat_history": return structuredClone(t.history);
+          case "chat_open": t.opened.push(args.id); return structuredClone(t.history.find((c: any) => c.id === args.id));
+          case "chat_delete": t.deleted.push(args.id); t.history = t.history.filter((c: any) => c.id !== args.id); return;
+          case "ai_model_details": return { sizeBytes: 3389983735, maxContextTokens: 262144, parameters: "4.7B", quantization: "Q4_K_M", capabilities: ["tools", "thinking"], thinkingValues: [false, true], legacyThinkingControls: false };
           default: return null;
         }
       },
@@ -197,4 +201,47 @@ test("reset during a request does not restore the old conversation", async ({ pa
   });
   await expect(page.getByLabel("Send message", { exact: true })).toBeVisible();
   await expect(page.locator(".chat-row")).toHaveCount(0);
+});
+
+test("left model control and saved history support search, reopen, new chat and deletion", async ({ page }) => {
+  await chatFixture(page);
+  const card = await page.locator(".chat-card").boundingBox();
+  const model = await page.getByRole("combobox", { name: "Chat AI model" }).boundingBox();
+  expect(model!.x - card!.x).toBeLessThan(25); expect(model!.width).toBeLessThan(280);
+  await page.evaluate(() => {
+    (window as any).aiTest.history = [
+      { id: "chat-one", title: "My first note", updatedAt: 1780000000, messageCount: 2, messages: [{ id: 1, role: "user", content: "write a note" }, { id: 2, role: "assistant", content: "Note created", route: { actions: [{name: "create_note", detail: "Saved note", success: true, path: "notes/test.txt"}] } }] },
+      { id: "chat-two", title: "A different question", updatedAt: 1780000001, messageCount: 2, messages: [{ id: 1, role: "user", content: "hello again" }, { id: 2, role: "assistant", content: "Hello from another conversation" }] },
+    ];
+  });
+  await page.getByLabel("Chat history", { exact: true }).click();
+  await page.getByLabel("Search chat history").fill("note");
+  await expect(page.locator(".history-item")).toHaveCount(1);
+  await page.getByRole("button", { name: "Open chat: My first note", exact: true }).click();
+  await expect(page.locator(".reply")).toHaveText("Note created");
+  await expect(page.locator(".chat-action")).toHaveText("✓ Saved note");
+  await page.getByLabel("Chat history", { exact: true }).click();
+  await page.getByLabel("Search chat history").fill("");
+  await page.getByRole("button", { name: "Open chat: A different question", exact: true }).click();
+  await expect(page.locator(".reply")).toHaveText("Hello from another conversation");
+  await page.getByLabel("New chat", { exact: true }).click();
+  await expect(page.locator(".chat-row")).toHaveCount(0);
+  await page.getByLabel("Chat history", { exact: true }).click();
+  const remove = page.getByRole("button", { name: "Delete chat: My first note", exact: true });
+  await remove.click(); await remove.click();
+  await expect(page.locator(".history-item")).toHaveCount(1);
+  expect(await page.evaluate(() => (window as any).aiTest.pending)).toBeNull();
+});
+
+test("8 GB preset and inspected reasoning save model-specific local parameters", async ({ page }) => {
+  await page.goto("/settings.html");
+  await page.getByRole("button", { name: "Start local AI", exact: true }).click();
+  await page.getByRole("button", { name: "Add model profile", exact: true }).click();
+  await page.getByRole("button", { name: "Balanced · 8 GB VRAM", exact: true }).click();
+  await page.getByRole("button", { name: "Inspect model", exact: true }).click();
+  await expect(page.getByText("Reasoning controls detected from the server.", { exact: false })).toBeVisible();
+  await choose(page, "Local reasoning", "Thinking off");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  const active = await page.evaluate(() => { const ai = (window as any).aiTest.settings.ai; return ai.profiles.find((p: any) => p.id === ai.activeProfileId); });
+  expect(active.localContextTokens).toBe(4096); expect(active.keepAliveMinutes).toBe(5); expect(active.reasoning).toBe("off"); expect(active.maxOutputTokens).toBe(2048);
 });

@@ -76,7 +76,18 @@ pub fn load() -> Settings {
 fn decode(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
     let value: serde_json::Value = serde_json::from_slice(bytes)?;
     let legacy = value.get("ai").is_none();
-    let mut settings: Settings = serde_json::from_value(value)?;
+    let mut settings: Settings = serde_json::from_value(value.clone())?;
+    for profile in &mut settings.ai.profiles {
+        let missing = value["ai"]["profiles"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|p| p["id"] == profile.id)
+            .is_some_and(|p| p.get("reasoning").is_none());
+        if profile.provider.is_local() && missing {
+            profile.reasoning = "adaptive".into();
+        }
+    }
     if legacy {
         settings.ai = crate::ai::Config::legacy(&settings.model);
     }
@@ -106,5 +117,21 @@ mod tests {
         assert_eq!(profile.model, "custom-claude-model");
         assert_eq!(profile.account(&profile.keys[0]), "anthropic-api-key");
         assert!(!loaded.ai.fallback_enabled);
+    }
+
+    #[test]
+    fn existing_local_profiles_migrate_to_adaptive_without_changing_online_profiles() {
+        let mut settings = Settings::default();
+        let mut local = settings.ai.profiles[0].clone();
+        local.id = "local".into();
+        local.provider = crate::ai::config::Provider::Ollama;
+        settings.ai.profiles.push(local);
+        let mut value = serde_json::to_value(settings).unwrap();
+        for p in value["ai"]["profiles"].as_array_mut().unwrap() {
+            p.as_object_mut().unwrap().remove("reasoning");
+        }
+        let loaded = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(loaded.ai.profiles[0].reasoning, "default");
+        assert_eq!(loaded.ai.profiles[1].reasoning, "adaptive");
     }
 }
