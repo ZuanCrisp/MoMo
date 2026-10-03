@@ -909,6 +909,33 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn adaptive_recovers_thinking_only_output_on_the_same_local_model() {
+        use serde_json::json;
+        let (url, rx, thread) = server(vec![
+            (200, json!({"thinking":{"values":[false,true]}}).to_string()),
+            (200, json!({"models":[]}).to_string()),
+            (200, json!({"message":{"content":"","thinking":"budget reached"},"done_reason":"length"}).to_string()),
+            (200, json!({"message":{"content":"391"}}).to_string()),
+        ]);
+        let mut c = config(url);
+        let p = &mut c.profiles[0];
+        p.provider = Provider::Ollama;
+        p.keys.clear();
+        p.reasoning = "adaptive".into();
+        let reply = send(&Chat::default(), &c, "hitung 17 x 23".into(), None, key)
+            .await
+            .unwrap();
+        assert!(reply.text.contains("391"));
+        assert!(!reply.used_fallback);
+        assert!(reply.text.contains("reduced reasoning"));
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        assert!(rx.recv().unwrap().contains("\"think\":true"));
+        assert!(rx.recv().unwrap().contains("\"think\":false"));
+        thread.join().unwrap();
+    }
+
+    #[tokio::test]
     async fn reset_cancels_an_inflight_turn_without_restoring_old_history() {
         let chat = Arc::new(Chat::default());
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

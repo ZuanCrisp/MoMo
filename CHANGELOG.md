@@ -9,6 +9,7 @@
 - MoMo's local runtime uses one loaded model and one parallel request, Flash Attention and q8_0 KV cache. A conservative context estimate retains recent complete turns while older text stays in the archive.
 - Settings explains what each integration reads, which separate credential it needs and how to enable its status pill.
 - Adaptive is the default for new local profiles and migrated local preferences. LM Studio models exposing supported effort levels use local Responses API with preserved function calls; unknown local APIs retain model defaults.
+- If a local adaptive request produces thinking without a final answer, MoMo retries once at a supported lighter level on the same model and labels the adjustment. Recovery never replays desktop tool results.
 
 Native macOS source is unchanged by this update.
 

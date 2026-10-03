@@ -364,7 +364,11 @@ pub fn parse_reply(provider: Provider, response: &Value) -> Result<String, Failu
             Retry::Profile,
         ));
     }
-    Ok(text)
+    Ok(if response["_momo_reasoning_reduced"] == true {
+        format!("Adaptive: reduced reasoning to complete this reply.\n\n{text}")
+    } else {
+        text
+    })
 }
 
 pub async fn complete(
@@ -387,10 +391,78 @@ pub async fn request(profile: &Profile, key: Option<&str>, body: &Value) -> Resu
         Provider::Ollama => "api/chat".into(),
         _ => "chat/completions".into(),
     };
-    let request = client(profile.timeout_seconds, profile.provider.is_local())?
-        .post(format!("{}/{suffix}", profile.base_url))
-        .json(&body);
-    json_response(authenticate(request, profile.provider, key)).await
+    let client = client(profile.timeout_seconds, profile.provider.is_local())?;
+    let url = format!("{}/{suffix}", profile.base_url);
+    let request = client.post(&url).json(&body);
+    let mut response = json_response(authenticate(request, profile.provider, key)).await?;
+    if profile.reasoning == "adaptive"
+        && reasoning_only(profile.provider, &response)
+        && !has_tool_results(&body)
+    {
+        let info = super::tuning::details(profile, key).await?;
+        let reduced = if profile.provider == Provider::Ollama
+            && body["think"] == true
+            && info.thinking_values.contains(&json!(false))
+        {
+            Some(json!(false))
+        } else if info.thinking_values.contains(&json!("low"))
+            && body["think"] != "low"
+            && body["reasoning"]["effort"] != "low"
+        {
+            Some(json!("low"))
+        } else {
+            None
+        };
+        if let Some(reduced) = reduced {
+            if profile.provider == Provider::Ollama {
+                body["think"] = reduced;
+            } else if profile.provider == Provider::LocalResponses {
+                body["reasoning"] = json!({"effort":reduced});
+            }
+            response = json_response(authenticate(
+                client.post(&url).json(&body),
+                profile.provider,
+                key,
+            ))
+            .await?;
+            response["_momo_reasoning_reduced"] = json!(true);
+        }
+    }
+    Ok(response)
+}
+
+fn has_tool_results(body: &Value) -> bool {
+    body["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|m| m["role"] == "tool")
+        || body["input"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|m| m["type"] == "function_call_output")
+}
+fn reasoning_only(provider: Provider, response: &Value) -> bool {
+    match provider {
+        Provider::Ollama => {
+            response["message"]["content"]
+                .as_str()
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+                && response["message"]["thinking"]
+                    .as_str()
+                    .is_some_and(|s| !s.is_empty())
+                && response["message"]["tool_calls"]
+                    .as_array()
+                    .is_none_or(|a| a.is_empty())
+        }
+        Provider::LocalResponses => response["output"].as_array().is_some_and(|items| {
+            !items.is_empty() && items.iter().all(|v| v["type"] == "reasoning")
+        }),
+        _ => false,
+    }
 }
 
 #[derive(Clone, Serialize, Debug, PartialEq, Eq)]
@@ -535,6 +607,22 @@ mod tests {
         ];
         assert_eq!(local_context(&profile, &messages).len(), 1);
         assert_eq!(messages.len(), 3);
+    }
+
+    #[test]
+    fn reasoning_recovery_never_retries_tool_results_or_tool_requests() {
+        assert!(has_tool_results(&json!({"messages":[{"role":"tool"}]})));
+        assert!(has_tool_results(
+            &json!({"input":[{"type":"function_call_output"}]})
+        ));
+        assert!(!reasoning_only(
+            Provider::Ollama,
+            &json!({"message":{"thinking":"thinking","tool_calls":[{}]}})
+        ));
+        assert!(!reasoning_only(
+            Provider::LocalResponses,
+            &json!({"output":[{"type":"reasoning"},{"type":"function_call"}]})
+        ));
     }
 
     #[test]
