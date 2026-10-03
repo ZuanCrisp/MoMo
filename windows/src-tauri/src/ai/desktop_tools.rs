@@ -8,6 +8,60 @@ use crate::desktop::Action;
 use serde_json::{json, Value};
 use std::sync::Mutex;
 
+/// Keep tool instructions out of ordinary chat. This also reduces prompt work
+/// for small local models that struggle to answer with unrelated tools present.
+pub fn requested(query: &str) -> bool {
+    let query = query.to_lowercase();
+    if [
+        "apa itu",
+        "what is",
+        "bagaimana cara",
+        "how to",
+        "jelaskan cara",
+    ]
+    .iter()
+    .any(|s| query.contains(s))
+    {
+        return false;
+    }
+    let target = [
+        "notepad",
+        "calculator",
+        "kalkulator",
+        "paint",
+        "file explorer",
+        "file_explorer",
+        "catatan",
+        "catat",
+        "note",
+        "file teks",
+        "text file",
+        "create_note",
+        "open_app",
+    ]
+    .iter()
+    .any(|s| query.contains(s));
+    target
+        && [
+            "open",
+            "buka",
+            "launch",
+            "jalankan",
+            "create",
+            "buat",
+            "write",
+            "tulis",
+            "catat",
+            "save",
+            "simpan",
+            "start",
+            "create_note",
+            "open_app",
+        ]
+        .iter()
+        .any(|s| query.contains(s))
+}
+
 #[derive(Default)]
 pub struct Journal {
     entries: Mutex<Vec<(String, Action)>>,
@@ -324,4 +378,13 @@ mod tests {
         assert_eq!(count.get(), 1);
         assert_eq!(journal.actions().len(), 1);
     }
+}
+#[test]
+fn tools_are_requested_for_actions_and_omitted_from_general_chat() {
+    assert!(requested("Buat catatan di Notepad"));
+    assert!(requested("Open calculator"));
+    assert!(requested("Catat ini: jadwal besok"));
+    assert!(!requested("Hitung 17 dikali 23"));
+    assert!(!requested("Apa itu Notepad?"));
+    assert!(!requested("Jelaskan cara membuka Notepad"));
 }

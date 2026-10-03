@@ -167,6 +167,7 @@ where
     let generation = chat.generation.load(Ordering::SeqCst);
     let resets = chat.resets.load(Ordering::SeqCst);
     let query = query.trim();
+    let computer_control = computer_control && desktop_tools::requested(query);
     if query.is_empty() || query.chars().count() > 32000 {
         return Err("Enter a message of 1–32000 characters.".into());
     }

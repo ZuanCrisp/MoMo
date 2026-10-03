@@ -99,6 +99,8 @@ Adaptive menjadi default untuk semua profil lokal baru, termasuk Ollama dan serv
 
 Jika model lokal menghabiskan budget hanya untuk thinking tanpa jawaban, Adaptive boleh mencoba sekali lagi pada model yang sama dengan thinking off atau level low yang didukung. MoMo memberi label bahwa reasoning diturunkan. Pemulihan ini tidak beralih ke provider online dan tidak dilakukan setelah hasil desktop tool masuk ke permintaan, sehingga tindakan tidak diulang.
 
+Instruksi desktop tool disertakan saat pesan meminta pembukaan aplikasi atau pembuatan catatan, misalnya **Buka Notepad**, **Open calculator**, atau **Buat catatan**. Pertanyaan umum memakai chat biasa agar model kecil tidak dibebani instruksi alat yang tidak diperlukan.
+
 Klik **History** di chat untuk mencari dan membuka percakapan, atau **+ / New chat** untuk memulai percakapan baru. Model di kiri bisa diganti sambil melanjutkan konteks teks. Klik tombol hapus dua kali untuk menghapus satu percakapan.
 
 Giliran yang selesai disimpan lokal di **%LOCALAPPDATA%\MoMo\chat-history.json** pada Windows, atau direktori data MoMo pada Linux. Penyimpanan dibatasi 100 percakapan, 200 pesan per percakapan dan 8 MiB; yang paling lama dibersihkan saat penuh. Teks sangat panjang dipersingkat dalam arsip. File/gambar/PDF tidak disimpan ulang di history: lampirkan kembali pada chat baru bila diperlukan. Riwayat tindakan hanya dibaca sebagai bukti hasil; membukanya tidak menjalankan tindakan kembali. History berisi teks percakapan dan disimpan terpisah dari vault API key, Git serta installer.
