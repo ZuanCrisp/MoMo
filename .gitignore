@@ -1,0 +1,42 @@
+# Build artefacts
+NotchBuddy/build/
+NotchBuddy/NotchBuddy.xcodeproj/project.xcworkspace/xcuserdata/
+NotchBuddy/NotchBuddy.xcodeproj/xcuserdata/
+*.xcuserstate
+
+# Xcode DerivedData (outside repo — listed for clarity)
+DerivedData/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# iCloud stubs
+*.icloud
+
+# Local only (never published)
+.claude/
+_prive/
+
+# Credentials and machine-specific files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local toolchains, archives, installed app and distribution files
+.tools/
+.local/
+app/
+installer/
+*.zip
+*.exe
+*.log
+
+# Windows / Linux development and release output
+windows/node_modules/
+windows/dist/
+windows/target/
+windows/release/
