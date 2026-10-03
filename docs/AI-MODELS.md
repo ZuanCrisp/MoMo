@@ -93,13 +93,15 @@ Server yang dimiliki MoMo membatasi satu model/satu permintaan paralel, mengakti
 
 History lengkap tetap tersimpan. Permintaan lokal memakai estimasi ukuran konteks untuk mempertahankan giliran terbaru; estimasi ini bukan tokenizer dan runtime tetap menerapkan batas konteksnya. Jika reasoning menghabiskan output tanpa jawaban, naikkan **Output token limit**, kurangi reasoning, atau gunakan model yang lebih ringan. First load memerlukan waktu lebih lama daripada respons sesudah model berada di memori.
 
-## History chat
-
 Adaptive menjadi default untuk semua profil lokal baru, termasuk Ollama dan server kompatibel OpenAI lokal. Profil versi lama tanpa pengaturan reasoning dimigrasikan ke Adaptive. Anda tetap dapat memilih Model default atau nilai manual yang didukung. Untuk LM Studio yang melaporkan level low/medium/high pada API model, MoMo memakai Responses API dan mempertahankan tool calling serta konteks percakapan. Server lama, kontrol yang belum didukung adapter, atau model tanpa thinking memakai default server. Konteks dan auto-unload LM Studio diatur saat memuat model di LM Studio. Lihat [metadata model LM Studio](https://lmstudio.ai/docs/developer/rest/list) dan [reasoning pada Responses](https://lmstudio.ai/docs/developer/openai-compat/responses).
 
 Jika model lokal menghabiskan budget hanya untuk thinking tanpa jawaban, Adaptive boleh mencoba sekali lagi pada model yang sama dengan thinking off atau level low yang didukung. MoMo memberi label bahwa reasoning diturunkan. Pemulihan ini tidak beralih ke provider online dan tidak dilakukan setelah hasil desktop tool masuk ke permintaan, sehingga tindakan tidak diulang.
 
 Instruksi desktop tool disertakan saat pesan meminta pembukaan aplikasi atau pembuatan catatan, misalnya **Buka Notepad**, **Open calculator**, atau **Buat catatan**. Pertanyaan umum memakai chat biasa agar model kecil tidak dibebani instruksi alat yang tidak diperlukan.
+
+Adaptive memakai mode ringan untuk membuka aplikasi dan menyimpan catatan, termasuk ketika isi catatan menyebut analisis/reasoning. Mode reasoning manual tetap mengikuti pilihan Anda.
+
+## History chat
 
 Klik **History** di chat untuk mencari dan membuka percakapan, atau **+ / New chat** untuk memulai percakapan baru. Model di kiri bisa diganti sambil melanjutkan konteks teks. Klik tombol hapus dua kali untuk menghapus satu percakapan.
 

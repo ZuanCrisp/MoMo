@@ -195,6 +195,11 @@ pub async fn wire_profile(profile: &Profile, key: Option<&str>) -> Result<Profil
     Ok(wire)
 }
 fn complex(query: &str) -> bool {
+    // Opening an app or copying a note benefits from the fastest supported
+    // mode, even when the requested note happens to mention "reasoning".
+    if super::desktop_tools::requested(query) {
+        return false;
+    }
     let query = query.to_lowercase();
     query.chars().count() > 240
         || query.contains("```")
@@ -339,3 +344,11 @@ mod tests {
         );
     }
 }
+assert_eq!(
+    reasoning(
+        "adaptive",
+        &[json!(false), json!(true)],
+        "Buat catatan berisi analisis dan adaptive reasoning"
+    ),
+    Some(json!(false))
+);
