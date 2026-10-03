@@ -6,7 +6,7 @@
 
 **Mochi doesn't get a notch on a PC — so it lives at the top of your screen instead.**
 
-Approve Claude Code permissions, watch your session work, drop a file, chat with Claude, keep an eye on your services — without leaving what you're doing.
+Approve Claude Code permissions, watch your session work, drop a file, chat with your chosen online or local AI, keep an eye on your services — without leaving what you're doing.
 
 ![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4?logo=windows)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-FFC131?logo=tauri&logoColor=black)
@@ -67,9 +67,18 @@ It works from any terminal — Windows Terminal, PowerShell, VS Code, Git Bash.
 
 ## Chat and keys
 
-**Settings… → Claude** takes your Anthropic API key. Keys live in the **Windows
-Credential Manager**, never on disk and never in the interface — the island can
-only ask whether a key exists. Same for every integration key.
+Open **Settings… → AI & models** to create model profiles for Claude, OpenAI /
+ChatGPT, Gemini, other OpenAI-compatible providers, Ollama or LM Studio/local
+OpenAI-compatible servers. Load the available models or enter a model ID, add
+labeled API keys, and save. Key fallback follows the row order; model fallback
+uses only explicitly selected profiles under **Fallback order**.
+
+Saved key values stay in the **Windows Credential Manager** (Linux: **Secret
+Service**). The interface shows masked fields for newly entered keys and only
+the presence of stored keys. Existing Claude keys/preferences migrate without
+requiring re-entry. Choose a saved profile from the chat toolbar; Stop cancels a
+request. See [the AI setup guide](../docs/AI-MODELS.md) for local models,
+fallback behavior and attachment support.
 
 No telemetry. The only network requests MoMo makes are to the services you
 configure yourself.
@@ -86,7 +95,6 @@ cd windows
 npm ci
 npm run tauri dev      # live-reloading development build
 npm run pack           # builds the installer and drops it in windows/release/
-npm run pack:offline   # includes the WebView2 installer (Windows only)
 ```
 
 `npm run dev` alone serves the front end in an ordinary browser, which is enough
@@ -94,12 +102,13 @@ to work on the island's looks. It also serves `dev/upload-preview.html`, which
 replays the whole file-drop choreography on a loop — the one part of the UI that
 otherwise needs a real drag from Explorer to see. Neither page ships in the app.
 
-`npm run pack` leaves two files in `windows/release/`, the same names the release
-workflow publishes:
+`npm run pack` creates one Windows version folder containing an installer with
+WebView2 included and a README:
 
 ```
-MoMo-Windows-X.Y.Z-setup.exe    the versioned installer
-MoMo-Windows-setup.exe          the same file under the rolling name
+release/X.Y.Z/
+  MoMo-X.Y.Z-Windows-x64-Setup.exe
+  README.md
 ```
 
 Installing is optional — `target/release/momo.exe` runs on its own. There is no

@@ -149,7 +149,7 @@ async fn poll_stripe(app: AppHandle) {
     };
     let auth = format!(
         "Basic {}",
-        crate::claude::base64_for(format!("{key}:").as_bytes())
+        crate::encoding::base64_for(format!("{key}:").as_bytes())
     );
     let http = client();
 

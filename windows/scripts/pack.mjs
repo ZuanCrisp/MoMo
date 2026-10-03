@@ -1,8 +1,9 @@
 // Copies the packages Tauri buries in target/release/bundle/ into
-// windows/release/, with the names they ship under. Used by `npm run pack` and
+// windows/release/, with the names they ship under. Windows gets one version
+// folder containing an installer and README. Used by `npm run pack` and
 // by the release workflows, so both produce exactly the same file names.
 
-import { readFileSync, mkdirSync, copyFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,29 +12,22 @@ const targetRoot = process.env.CARGO_TARGET_DIR
   ? resolve(root, process.env.CARGO_TARGET_DIR)
   : join(root, "target");
 const bundleRoot = join(targetRoot, "release", "bundle");
-const outDir = join(root, "release");
 
 const { version } = JSON.parse(readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8"));
+const outDir = process.platform === "win32" ? join(root, "release", version) : join(root, "release");
 
 // What each platform ships: where Tauri puts it, how to recognise it, and the
 // names it is published under (the rolling name, when there is one, always
 // points at the latest release).
 const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
 const debArch = process.arch === "arm64" ? "arm64" : "amd64";
-const offline = process.argv.includes("--offline");
 const windowsArch = process.arch === "arm64" ? "arm64" : "x64";
-if (offline && process.platform !== "win32") {
-  console.error("Offline WebView2 installers are supported on Windows only.");
-  process.exit(1);
-}
 const PACKAGES = {
   win32: [
     {
       dir: "nsis",
       suffix: "-setup.exe",
-      names: offline
-        ? [`MoMo-Windows-${version}-${windowsArch}-offline-setup.exe`, `MoMo-Windows-${windowsArch}-offline-setup.exe`]
-        : [`MoMo-Windows-${version}-setup.exe`, "MoMo-Windows-setup.exe"],
+      names: [`MoMo-${version}-Windows-${windowsArch}-Setup.exe`],
     },
   ],
   linux: [
@@ -80,6 +74,19 @@ for (const { dir, suffix, names } of packages) {
     copyFileSync(built, dest);
     written.push(dest);
   }
+}
+
+if (process.platform === "win32") {
+  const name = PACKAGES.win32[0].names[0];
+  const readme = `# MoMo ${version} untuk Windows\n\n` +
+    `Installer: **${name}**\n\n` +
+    `Satu installer untuk Windows 10/11 ${windowsArch}. Sudah menyertakan Microsoft WebView2 Runtime, sehingga pemasangan bisa dilakukan tanpa internet jika runtime belum tersedia.\n\n` +
+    `1. Salin installer ke perangkat tujuan.\n2. Klik dua kali installer dan ikuti wizard.\n3. Buka MoMo dari Start Menu.\n4. Gunakan ikon tray untuk Settings atau Quit. Arahkan mouse ke tengah bagian paling atas layar untuk membuka island.\n\n` +
+    `Perangkat tujuan tidak membutuhkan Node.js, Rust, npm atau C++ Build Tools. Aplikasi dipasang untuk akun Windows saat ini.\n\n` +
+    `## Mengatur AI\n\nBuka **Settings → AI & models** untuk memilih provider/model, mengisi key dan mengatur fallback. Untuk model lokal, jalankan Ollama atau server lokal yang kompatibel dengan OpenAI, lalu pilih profil lokal. Runtime dan model AI diunduh terpisah. Key diisi per perangkat; installer tidak memuat credential pribadi. Chat/API online tetap membutuhkan internet.\n\n` +
+    `## Instalasi otomatis\n\n\`\`\`powershell\n.\\${name} /S\n\`\`\`\n\n` +
+    `Installer MoMo belum ditandatangani secara digital. Source dan panduan: https://github.com/ZuanCrisp/MoMo\n`;
+  writeFileSync(join(outDir, "README.md"), readme);
 }
 
 console.log("\n  Packages ready\n");

@@ -15,11 +15,6 @@ on:
       - 'LICENSE*'
       - '.github/workflows/windows.yml'
   workflow_dispatch:
-    inputs:
-      offline:
-        description: Include the offline WebView2 installer
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -67,21 +62,23 @@ jobs:
       - name: Check package versions
         run: npm run check:versions
 
+      - name: Install test browser
+        run: npx playwright install chromium
+
+      - name: Test AI settings and chat UI
+        run: npm run test:ui
+
       - name: Build installer
         run: npm run pack
 
       - name: Test Rust workspace
         run: cargo +stable test --workspace --release --locked
 
-      - name: Build offline installer
-        if: github.event_name == 'workflow_dispatch' && inputs.offline
-        run: npm run pack:offline
-
       - name: Upload installers
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: MoMo-Windows-x64
-          path: windows/release/*.exe
+          path: windows/release/*/
           if-no-files-found: error
           retention-days: 14

@@ -2,13 +2,15 @@
 
 MoMo is a desktop companion that displays coding sessions, permission requests, chats, file drops and service integrations at the top of your screen.
 
-This repository is a rebrand of [Coucou](https://github.com/Louis-CFM/coucou), based on its 0.1.2 source archive. The Windows/Linux package version is 0.1.1. See [PROVENANCE.md](PROVENANCE.md) for the origin and changes.
+This repository is a rebrand of [Coucou](https://github.com/Louis-CFM/coucou), based on its 0.1.2 source archive. The Windows/Linux package version is 0.2.0. See [PROVENANCE.md](PROVENANCE.md) for the origin and changes.
+
+Windows/Linux chat supports Claude, OpenAI / ChatGPT, Gemini, other OpenAI-compatible APIs and local models through Ollama or a local OpenAI-compatible server. Each model profile has its own ordered API keys and optional model fallbacks. See [the AI setup guide](docs/AI-MODELS.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Windows installation
 
-Run a MoMo Windows x64 installer on Windows 10 or 11. The standard installer downloads WebView2 if it is missing; the offline variant includes its installer. Target devices do not need Node.js, Rust or build tools.
+Run the MoMo Windows x64 installer on Windows 10 or 11. The single installer includes Microsoft WebView2 for installation without internet when the runtime is missing. Target devices do not need Node.js, Rust or build tools.
 
-Compiled installers and local tools are excluded from Git. The **Windows** workflow can generate installer artifacts from **Actions → Windows → Run workflow**; select the offline option to also build the offline variant. MoMo installers are currently unsigned.
+Compiled installers and local tools are excluded from Git. The **Windows** workflow can generate an installer artifact from **Actions → Windows → Run workflow**. Each version folder contains only its installer and README. MoMo installers are currently unsigned.
 
 See [PANDUAN-WINDOWS.md](PANDUAN-WINDOWS.md) for installation and [windows/README.md](windows/README.md) for usage.
 
@@ -29,10 +31,9 @@ Build an installer:
 
 ```powershell
 npm.cmd run pack
-npm.cmd run pack:offline
 ```
 
-Output is written to `windows/release/`. The offline build downloads the official WebView2 installer while packaging; app features that call online services still require internet.
+Output is written to `windows/release/<version>/`. Packaging downloads the official WebView2 installer to include it in the setup file; app features that call online services still require internet.
 
 If this checkout has a portable toolchain under `.tools/`, use `.\npm-momo.cmd` in place of `npm.cmd`. The helper also supports an installed toolchain.
 
@@ -58,6 +59,8 @@ From `windows/`:
 
 ```powershell
 npm.cmd run build
+npx.cmd playwright install chromium
+npm.cmd run test:ui
 cargo fmt --all -- --check
 cargo test --workspace --release --locked
 ```

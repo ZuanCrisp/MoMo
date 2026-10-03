@@ -16,14 +16,16 @@ pub struct Settings {
     pub screen: String,
     pub autostart: bool,
     pub hooks_installed: bool,
-    /// Claude model used by the chat. Changeable in the settings window.
+    /// Legacy Claude model retained to migrate preferences from older builds.
     /// Defaulted explicitly so a settings.json written by an older build still loads.
     #[serde(default = "default_model")]
     pub model: String,
+    #[serde(default)]
+    pub ai: crate::ai::Config,
 }
 
 fn default_model() -> String {
-    crate::claude::DEFAULT_MODEL.to_string()
+    crate::ai::config::LEGACY_MODEL.to_string()
 }
 
 impl Default for Settings {
@@ -43,6 +45,7 @@ impl Default for Settings {
             autostart: false,
             hooks_installed: false,
             model: default_model(),
+            ai: crate::ai::Config::default(),
         }
     }
 }
@@ -59,9 +62,19 @@ fn settings_path() -> PathBuf {
 
 pub fn load() -> Settings {
     match std::fs::read(settings_path()) {
-        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Ok(bytes) => decode(&bytes).unwrap_or_default(),
         Err(_) => Settings::default(),
     }
+}
+
+fn decode(bytes: &[u8]) -> Result<Settings, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)?;
+    let legacy = value.get("ai").is_none();
+    let mut settings: Settings = serde_json::from_value(value)?;
+    if legacy {
+        settings.ai = crate::ai::Config::legacy(&settings.model);
+    }
+    Ok(settings)
 }
 
 pub fn save(settings: &Settings) -> std::io::Result<()> {
@@ -69,5 +82,23 @@ pub fn save(settings: &Settings) -> std::io::Result<()> {
     crate::platform::ensure_private_dir(&dir)?;
     let json = serde_json::to_vec_pretty(settings)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    std::fs::write(settings_path(), json)
+    let temporary = dir.join("settings.json.tmp");
+    std::fs::write(&temporary, json)?;
+    std::fs::rename(temporary, settings_path())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn old_preferences_keep_the_selected_claude_model_and_original_key_account() {
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value.as_object_mut().unwrap().remove("ai");
+        value["model"] = "custom-claude-model".into();
+        let loaded = decode(&serde_json::to_vec(&value).unwrap()).unwrap();
+        let profile = &loaded.ai.profiles[0];
+        assert_eq!(profile.model, "custom-claude-model");
+        assert_eq!(profile.account(&profile.keys[0]), "anthropic-api-key");
+        assert!(!loaded.ai.fallback_enabled);
+    }
 }

@@ -1,9 +1,8 @@
 name: Linux
 
 # Builds the Linux app (AppImage, .deb, .rpm) from the same Tauri project as
-# Windows. Triggered by tags like `linux-v0.1.0`, by hand, and by pull requests
-# that touch windows/ or this file (build and test only); the macOS and Windows
-# workflows are untouched.
+# Windows. Main-branch changes, tags, manual runs and pull requests build/test
+# the shared source. Release publication stays disabled until explicitly enabled.
 #
 # Two jobs on purpose. `build` runs npm, cargo and the AppImage tooling (which
 # downloads its own helpers) with a read-only token that is not even kept on
@@ -11,6 +10,11 @@ name: Linux
 
 on:
   push:
+    branches: [main]
+    paths:
+      - 'windows/**'
+      - 'LICENSE*'
+      - '.github/workflows/linux.yml'
     tags:
       - 'linux-v*'
   workflow_dispatch:
@@ -78,6 +82,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+
+      - name: Check Rust formatting and package versions
+        run: |
+          cargo +stable fmt --all -- --check
+          npm run check:versions
 
       # Same check as the Windows workflow: three files carry the version.
       - name: Check the tag and every version agree

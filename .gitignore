@@ -40,3 +40,5 @@ windows/node_modules/
 windows/dist/
 windows/target/
 windows/release/
+windows/test-results/
+windows/playwright-report/

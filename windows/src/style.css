@@ -806,6 +806,17 @@ input[type="range"]::-webkit-slider-thumb {
   display: flex;
 }
 
+.chat-toolbar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.chat-model { flex: 1; min-width: 0; width: 0; color: var(--ink-2); background: #252832; border: 1px solid #424856; border-radius: 7px; padding: 5px; font: 11px var(--font); }
+.chat-model option { background: #1a1c20; color: #eee; }
+.chat-manage { flex-shrink: 0; background: transparent; border: 0; color: #b0c7f1; font: 11px var(--font); cursor: pointer; }
+.chat-model:focus-visible, .chat-manage:focus-visible, .send-btn:focus-visible { outline: 2px solid #91b8ff; }
+.chat-answer { min-width: 0; }
+.chat-route { font: 10px/1.4 var(--font); color: #92abd4; margin-bottom: 4px; overflow-wrap: anywhere; }
+.chat-error { font: 11px/1.4 var(--font); color: #ffb3bb; white-space: pre-line; max-height: 65px; overflow-y: auto; flex-shrink: 0; }
+.chat-error:empty { display: none; }
+.chat-stop { font-size: 11px; }
+
 .chat-row.user {
   justify-content: flex-end;
   padding-left: 32px;

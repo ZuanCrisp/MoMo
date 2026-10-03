@@ -2,6 +2,7 @@
 
 import type { BotEmoteName, BotStateName, IslandMode, IslandViewName } from "./layout";
 import type { EyeShape } from "../mochi/engine";
+import { defaultAIConfig, type AIConfig, type AIReply } from "./ai";
 
 export type AgentSource = "claudeCode" | "n8n" | "agent";
 export type PillBadge = "approval" | "finished" | "error";
@@ -32,6 +33,7 @@ export interface ChatMessage {
   id: number;
   role: "user" | "assistant";
   content: string;
+  route?: Omit<AIReply, "text">;
 }
 
 export type PromptContext =
@@ -90,8 +92,9 @@ export interface Settings {
   screen: "primary" | "cursor";
   autostart: boolean;
   hooksInstalled: boolean;
-  /** Claude model used by the chat. */
+  /** Kept for migrating preferences from the original Claude-only chat. */
   model: string;
+  ai: AIConfig;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -106,6 +109,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autostart: false,
   hooksInstalled: false,
   model: "claude-opus-5",
+  ai: defaultAIConfig(),
 };
 
 type Listener = () => void;

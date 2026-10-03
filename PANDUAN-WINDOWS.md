@@ -2,20 +2,24 @@
 
 ## Memasang aplikasi
 
-Gunakan Windows 10/11 64-bit (x64). Pilih installer standar jika perangkat memiliki internet, atau varian offline jika WebView2 perlu dipasang tanpa internet.
+Gunakan Windows 10/11 64-bit (x64). Setiap versi disediakan dalam satu folder yang berisi **satu installer dan README.md**. Installer menyertakan Microsoft WebView2 Runtime agar pemasangan bisa dilakukan tanpa internet jika runtime belum terpasang.
 
 1. Salin installer ke perangkat tujuan.
 2. Klik dua kali file installer dan ikuti wizard.
 3. Buka **MoMo** dari Start Menu.
 4. Arahkan mouse ke tengah bagian paling atas layar. Gunakan ikon tray untuk Settings atau Quit.
 
-Perangkat tujuan tidak perlu memasang Node.js, npm, Rust, Cargo atau C++ Build Tools. Instalasi berlaku untuk akun Windows saat ini. Chat/API dan integrasi online tetap memerlukan internet serta konfigurasi per perangkat.
+Perangkat tujuan tidak perlu Node.js, npm, Rust, Cargo atau C++ Build Tools. Instalasi berlaku untuk akun Windows saat ini. AI online membutuhkan internet dan key per perangkat; AI lokal memerlukan runtime dan model yang sudah tersedia di perangkat.
 
-Installer MoMo belum ditandatangani secara digital. Installer standar sudah diuji pada perangkat pengembangan; varian offline belum diuji pada perangkat bersih tanpa WebView2.
+Installer MoMo belum ditandatangani secara digital. Pemasangan diuji pada perangkat pengembangan yang memiliki WebView2; pemasangan runtime pada perangkat bersih tanpa WebView2 belum diuji.
+
+## Mengatur AI
+
+Buka **Settings → AI & models** untuk memilih provider/model, key utama/cadangan, atau server model lokal. Ikuti [panduan AI](docs/AI-MODELS.md). Installer tidak memuat credential pribadi.
 
 ## Membuat installer dari source
 
-Pasang Node.js 22, Rust stable MSVC, C++ Build Tools dan WebView2 sesuai [prasyarat Tauri](https://v2.tauri.app/start/prerequisites/#windows). Buka terminal baru setelah memasangnya agar PATH diperbarui.
+Pasang Node.js 22, Rust stable MSVC, C++ Build Tools dan WebView2 sesuai [prasyarat Tauri](https://v2.tauri.app/start/prerequisites/#windows). Buka terminal baru setelah pemasangan agar PATH diperbarui.
 
 Dari root repository:
 
@@ -23,32 +27,34 @@ Dari root repository:
 cd windows
 npm.cmd ci
 npm.cmd run pack
-npm.cmd run pack:offline
 ```
 
-Hasil berada di `windows/release/`:
+Hasil build:
 
-- `MoMo-Windows-0.1.1-setup.exe`: installer standar.
-- `MoMo-Windows-0.1.1-x64-offline-setup.exe`: menyertakan installer resmi Microsoft WebView2.
+```text
+windows/release/0.2.0/
+  MoMo-0.2.0-Windows-x64-Setup.exe
+  README.md
+```
 
-Nomor versi mengikuti konfigurasi source. Build offline membutuhkan internet ketika mengunduh runtime untuk dimasukkan ke installer. File installer hasil build tidak dimasukkan ke Git.
+Nomor versi mengikuti konfigurasi source. Build membutuhkan internet untuk mengunduh runtime WebView2 yang dimasukkan ke installer. Installer hasil build tidak dimasukkan ke Git.
 
 Jika tersedia toolchain portable dalam `.tools/` pada root repository, ganti `npm.cmd` dengan `.\npm-momo.cmd`. Helper ini juga dapat memakai toolchain yang sudah ada di PATH.
 
-Alternatif: buka **Actions → Windows → Run workflow** di GitHub. Aktifkan opsi offline jika diperlukan, lalu unduh artifact setelah build berhasil.
+Alternatif: buka **Actions → Windows → Run workflow** di GitHub, lalu unduh artifact setelah build berhasil.
 
 ## Instalasi otomatis
 
-Dari folder hasil build:
+Dari folder installer:
 
 ```powershell
-.\MoMo-Windows-0.1.1-x64-offline-setup.exe /S
+.\MoMo-0.2.0-Windows-x64-Setup.exe /S
 ```
 
 ## Menghapus aplikasi
 
 Jika pernah memasang hook integrasi, gunakan **Uninstall hooks** di pengaturan MoMo terlebih dahulu. Kemudian buka **Windows Settings → Apps → MoMo → Uninstall**.
 
-## Lisensi
+## Lisensi source
 
-Kode mengikuti [LICENSE](LICENSE). Karakter, ikon, animasi, suara dan media asli mengikuti [LICENSE-ASSETS.md](LICENSE-ASSETS.md); ketentuan aset tersebut tetap berlaku setelah rebranding. Kedua pemberitahuan lisensi disertakan dalam installer.
+Kode mengikuti [LICENSE](LICENSE). Karakter, ikon, animasi, suara dan media asli mengikuti [LICENSE-ASSETS.md](LICENSE-ASSETS.md). Pemberitahuan lisensi disertakan di dalam aplikasi.

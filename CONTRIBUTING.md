@@ -14,7 +14,7 @@ For setup and build commands, see [README.md](README.md). For integration payloa
 
 ## Validation
 
-For Windows changes, run `npm.cmd run build`, `cargo fmt --all -- --check` and `cargo test --workspace --release --locked` from `windows/`.
+For Windows/Linux changes, run `npm.cmd run build`, `npm.cmd run test:ui`, `cargo fmt --all -- --check` and `cargo test --workspace --release --locked` from `windows/`. Install the UI test browser once with `npx.cmd playwright install chromium`. AI tests use simulated IPC/HTTP/vault data and must never depend on personal credentials.
 
 For macOS changes, build the generated project and run the screen geometry and safe-link checks described in the README.
 

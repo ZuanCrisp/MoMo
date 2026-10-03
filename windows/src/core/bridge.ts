@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import type { Settings } from "./state";
+import type { AIConfig, AIProfile, AIKeyStatus, AIKeyUpdate, AIModel, AIReply } from "./ai";
 
 export const IS_TAURI =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -83,8 +84,15 @@ export const Bridge = {
   // ── Chat, files, secrets ──────────────────────────────────────────────────
   /** One chat turn. The API key and any file bytes never leave Rust. */
   chatSend: (query: string, context: ChatContext | null) =>
-    callOrThrow<{ text: string }>("chat_send", { query, context }),
+    callOrThrow<AIReply>("chat_send", { query, context }),
+  chatCancel: () => callOrThrow<void>("chat_cancel"),
   chatReset: () => call<void>("chat_reset"),
+  aiKeyStatus: () => callOrThrow<AIKeyStatus[]>("ai_key_status"),
+  aiSaveConfig: (config: AIConfig, updates: AIKeyUpdate[]) =>
+    callOrThrow<Settings>("ai_save_config", { config, updates }),
+  aiSetActive: (profileId: string) => callOrThrow<Settings>("ai_set_active", { profileId }),
+  aiListModels: (profile: AIProfile, draftKey: string | null) =>
+    callOrThrow<AIModel[]>("ai_list_models", { profile, draftKey }),
   /** Copies a dropped file into the inbox. */
   ingestFile: (path: string) => callOrThrow<DroppedFile>("ingest_file", { path }),
   /** Only ever tells you whether a key exists — never its value. */

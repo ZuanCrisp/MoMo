@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 — Windows / Linux
+
+- AI model profiles for Claude, OpenAI / ChatGPT, Gemini, other OpenAI-compatible APIs, Ollama and local OpenAI-compatible servers.
+- Provider model discovery and manual model IDs; multiple credential slots per profile with ordered key fallback.
+- Explicit ordered model fallback, including a notice when a local profile can fall back to an online provider.
+- Draft-based settings editor, masked key fields, labels and reorder controls. Keys stay in the OS credential store; existing Claude preferences and key account migrate automatically.
+- Chat profile selector, reply routing labels, Stop button and recoverable failed messages.
+- HTTP/vault tests and browser UI tests; Windows installer packaging and Linux build validation.
+- One Windows installer per version, with WebView2 included and a README beside it.
+
+Native macOS source is unchanged by this feature update.
+
 ## 0.1.2 — October 2, 2026
 
 - Codex support (GitHub build): sessions show up live on the Codex pill, and permission requests get Allow and Deny in the notch. Install from Settings → Codex Hooks, then trust the hooks once with /hooks in Codex (#130) — thanks @lacatu5

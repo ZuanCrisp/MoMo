@@ -1,6 +1,7 @@
 // MoMo for Windows — app wiring and the commands the island calls.
 
-mod claude;
+mod ai;
+mod encoding;
 mod files;
 mod hooks;
 mod integrations;
@@ -20,7 +21,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 
-use claude::{Chat, ChatContext, ChatReply};
+use ai::{Chat, ChatContext, ChatReply};
 use files::DroppedFile;
 use hooks::{HookPreview, HookStatus};
 use island::{PollGate, ScreenInfo};
@@ -60,9 +61,13 @@ fn boot(app: AppHandle, shared: State<Shared>) -> BootInfo {
 }
 
 #[tauri::command]
-fn save_settings(app: AppHandle, shared: State<Shared>, settings: Settings) {
+fn save_settings(app: AppHandle, shared: State<Shared>, mut settings: Settings) {
     let (screen_changed, autostart_changed) = {
         let mut current = shared.settings.lock().unwrap();
+        // General preferences never replace credentials/profiles from a stale
+        // settings window. AI changes go through ai_save_config instead.
+        settings.ai = current.ai.clone();
+        settings.model = current.model.clone();
         let screen_changed = current.screen != settings.screen;
         let autostart_changed = current.autostart != settings.autostart;
         *current = settings.clone();
@@ -252,8 +257,75 @@ async fn chat_send(
     query: String,
     context: Option<ChatContext>,
 ) -> Result<ChatReply, String> {
-    let model = shared.settings.lock().unwrap().model.clone();
-    claude::send(&chat, &model, query, context).await
+    let config = shared.settings.lock().unwrap().ai.clone();
+    ai::send(&chat, &config, query, context, secrets::read_ai).await
+}
+
+#[tauri::command]
+fn chat_cancel(chat: State<Chat>) {
+    chat.cancel();
+}
+
+#[tauri::command]
+fn ai_key_status(shared: State<Shared>) -> Result<Vec<ai::KeyStatus>, String> {
+    let config = shared.settings.lock().unwrap().ai.clone();
+    ai::key_status(&config)
+}
+
+#[tauri::command]
+fn ai_save_config(
+    app: AppHandle,
+    shared: State<Shared>,
+    config: ai::Config,
+    updates: Vec<ai::KeyUpdate>,
+) -> Result<Settings, String> {
+    let saved = {
+        let mut current = shared.settings.lock().unwrap();
+        ai::save_config(&mut current, config, updates, &ai::SystemVault, |next| {
+            settings::save(next).map_err(|_| "Settings write failed.".into())
+        })?
+    };
+    let _ = app.emit("settings-changed", saved.clone());
+    Ok(saved)
+}
+
+#[tauri::command]
+fn ai_set_active(
+    app: AppHandle,
+    shared: State<Shared>,
+    profile_id: String,
+) -> Result<Settings, String> {
+    let saved = {
+        let mut current = shared.settings.lock().unwrap();
+        let mut next = current.clone();
+        if !next
+            .ai
+            .profiles
+            .iter()
+            .any(|profile| profile.id == profile_id)
+        {
+            return Err("Choose a saved AI profile.".into());
+        }
+        next.ai.active_profile_id = profile_id;
+        next.ai
+            .fallback_profile_ids
+            .retain(|id| id != &next.ai.active_profile_id);
+        settings::save(&next).map_err(|_| "Could not save the selected AI profile.")?;
+        *current = next.clone();
+        next
+    };
+    let _ = app.emit("settings-changed", saved.clone());
+    Ok(saved)
+}
+
+#[tauri::command]
+async fn ai_list_models(
+    shared: State<'_, Shared>,
+    profile: ai::Profile,
+    draft_key: Option<String>,
+) -> Result<Vec<ai::Model>, String> {
+    let saved = shared.settings.lock().unwrap().ai.clone();
+    ai::list_models(profile, draft_key, saved).await
 }
 
 #[tauri::command]
@@ -333,8 +405,8 @@ fn create_settings_window(app: &AppHandle) {
     match WebviewWindowBuilder::new(app, "settings", url)
         .additional_browser_args(BROWSER_ARGS)
         .title("Settings — MoMo")
-        .inner_size(560.0, 680.0)
-        .min_inner_size(460.0, 480.0)
+        .inner_size(820.0, 780.0)
+        .min_inner_size(480.0, 480.0)
         .resizable(true)
         .visible(false)
         .center()
@@ -406,7 +478,12 @@ pub fn run() {
             approval_decline,
             log_line,
             chat_send,
+            chat_cancel,
             chat_reset,
+            ai_key_status,
+            ai_save_config,
+            ai_set_active,
+            ai_list_models,
             ingest_file,
             secret_present,
             secret_set,
