@@ -300,6 +300,14 @@ mod tests {
     #[test]
     fn adaptive_uses_supported_controls_without_inventing_unknown_ones() {
         assert_eq!(
+            reasoning(
+                "adaptive",
+                &[json!(false), json!(true)],
+                "Buat catatan berisi analisis dan adaptive reasoning"
+            ),
+            Some(json!(false))
+        );
+        assert_eq!(
             reasoning("adaptive", &[json!(false), json!(true)], "hello"),
             Some(json!(false))
         );
@@ -344,11 +352,3 @@ mod tests {
         );
     }
 }
-assert_eq!(
-    reasoning(
-        "adaptive",
-        &[json!(false), json!(true)],
-        "Buat catatan berisi analisis dan adaptive reasoning"
-    ),
-    Some(json!(false))
-);
