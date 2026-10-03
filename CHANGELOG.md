@@ -7,6 +7,7 @@
 - Ollama model inspection reports weight size, quantization, capabilities, context ceiling and supported reasoning controls. Adaptive reasoning chooses lighter settings for short messages and more reasoning for analysis, code and maths; unknown families retain model defaults.
 - Balanced 8 GB VRAM preset: 4096 context tokens, 4096 output tokens, adaptive reasoning, 5-minute keep-alive. Qwen3.5 4B is selected when available in the local setup panel.
 - MoMo's local runtime uses one loaded model and one parallel request, Flash Attention and q8_0 KV cache. A conservative context estimate retains recent complete turns while older text stays in the archive.
+- Closing or restarting MoMo's owned local runtime also stops its model runners and releases VRAM; an independently running Ollama server is left alone.
 - Settings explains what each integration reads, which separate credential it needs and how to enable its status pill.
 - Adaptive is the default for new local profiles and migrated local preferences. LM Studio models exposing supported effort levels use local Responses API with preserved function calls; unknown local APIs retain model defaults.
 - If a local adaptive request produces thinking without a final answer, MoMo retries once at a supported lighter level on the same model and labels the adjustment. Recovery never replays desktop tool results.

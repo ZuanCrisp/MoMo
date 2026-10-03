@@ -1,35 +1,32 @@
 //! MoMo owns a separate loopback Ollama server, leaving an existing server alone.
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use serde::Serialize;
 
+mod owned_runtime;
+use owned_runtime::OwnedRuntime;
+
 pub const BASE_URL: &str = "http://127.0.0.1:11435";
 
 #[derive(Default)]
 pub struct LocalAI {
-    child: Mutex<Option<Child>>,
+    child: Mutex<Option<OwnedRuntime>>,
     directory: Mutex<String>,
     starting: tokio::sync::Mutex<()>,
 }
 
 impl Drop for LocalAI {
     fn drop(&mut self) {
-        if let Some(child) = self.child.get_mut().unwrap().as_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        self.child.get_mut().unwrap().take();
     }
 }
 
 impl LocalAI {
     pub fn stop(&self) {
-        if let Some(mut child) = self.child.lock().unwrap().take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        self.child.lock().unwrap().take();
     }
 }
 
@@ -164,7 +161,7 @@ pub async fn status(state: &LocalAI, directory: &str) -> Result<Status, String> 
             .lock()
             .unwrap()
             .as_mut()
-            .is_some_and(|child| child.try_wait().ok().flatten().is_none());
+            .is_some_and(|runtime| runtime.child.try_wait().ok().flatten().is_none());
     let running = owned && healthy().await;
     Ok(Status {
         directory,
@@ -211,10 +208,7 @@ pub async fn start(state: &LocalAI, directory: &str) -> Result<Status, String> {
     }
     {
         let mut child = state.child.lock().unwrap();
-        if let Some(mut previous) = child.take() {
-            let _ = previous.kill();
-            let _ = previous.wait();
-        }
+        child.take();
     }
     // Probe before spawning: never attach to or terminate an unrelated process.
     let reservation = std::net::TcpListener::bind("127.0.0.1:11435")
@@ -239,10 +233,16 @@ pub async fn start(state: &LocalAI, directory: &str) -> Result<Status, String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let child = command
         .spawn()
         .map_err(|_| "Could not start Ollama. Check the installed runtime.")?;
-    *state.child.lock().unwrap() = Some(child);
+    let runtime = OwnedRuntime::new(child)?;
+    *state.child.lock().unwrap() = Some(runtime);
     *state.directory.lock().unwrap() = directory.clone();
     for _ in 0..60 {
         if healthy().await {
@@ -253,12 +253,13 @@ pub async fn start(state: &LocalAI, directory: &str) -> Result<Status, String> {
             .lock()
             .unwrap()
             .as_mut()
-            .is_some_and(|child| child.try_wait().ok().flatten().is_some())
+            .is_some_and(|runtime| runtime.child.try_wait().ok().flatten().is_some())
         {
             break;
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
+    state.stop();
     Err("Ollama did not become ready. Restart local AI and check that this runtime supports your models.".into())
 }
 
