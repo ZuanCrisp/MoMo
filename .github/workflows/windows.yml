@@ -1,0 +1,95 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'windows/**'
+      - 'NotchBuddy/Resources/sounds/**'
+      - 'LICENSE*'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'windows/**'
+      - 'NotchBuddy/Resources/sounds/**'
+      - 'LICENSE*'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+    inputs:
+      offline:
+        description: Include the offline WebView2 installer
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            windows/target
+          key: windows-cargo-${{ hashFiles('windows/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Rust formatting
+        run: cargo +stable fmt --all -- --check
+
+      - name: Check package versions
+        shell: pwsh
+        run: |
+          $conf = (Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $pkg = (Get-Content package.json | ConvertFrom-Json).version
+          $lock = (Get-Content package-lock.json | ConvertFrom-Json).version
+          $cargo = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"(.+)"').Matches[0].Groups[1].Value
+          if ($conf -ne $pkg -or $conf -ne $lock -or $conf -ne $cargo) {
+            throw "Package versions disagree: Tauri=$conf npm=$pkg lock=$lock Cargo=$cargo"
+          }
+
+      - name: Build installer
+        run: npm run pack
+
+      - name: Test Rust workspace
+        run: cargo +stable test --workspace --release --locked
+
+      - name: Build offline installer
+        if: github.event_name == 'workflow_dispatch' && inputs.offline
+        run: npm run pack:offline
+
+      - name: Upload installers
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MoMo-Windows-x64
+          path: windows/release/*.exe
+          if-no-files-found: error
+          retention-days: 14
